@@ -4,7 +4,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/4]).
+-export([start_link/3]).
 
 %% gen_server
 -export([init/1,
@@ -25,8 +25,8 @@
 
 %% API.
 
-start_link(Ref, Socket, Transport, Opts) ->
-    proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
+start_link(Ref, Transport, Opts) ->
+    proc_lib:start_link(?MODULE, init, [Ref, Transport, Opts]).
 
 dispatch({request, Ref, Msg}, State) ->
     ReplyFun = fun (Reply) -> send_message({response, Ref, {result, Reply}}, State) end,
@@ -34,8 +34,7 @@ dispatch({request, Ref, Msg}, State) ->
         {reply, Reply} -> ReplyFun(Reply);
         noreply -> ok
     catch
-        C:Error ->
-            ST = erlang:get_stacktrace(),
+        C:Error:ST ->
             system_log:error("Api server message handling exception: ~p~n~p", [Error, ST]),
             send_message({response, Ref, {exception, {C, Error, ST}}}, State)
     end,
@@ -76,8 +75,8 @@ handle_message({connect_nodes, HostsAndPorts}, ReplyFun) ->
         end (_Retries = 10),
         noreply
     catch
-        _:E ->
-            system_log:error("Connecting nodes error: ~p~n~p", [E, erlang:get_stacktrace()]),
+        _:E:ST ->
+            system_log:error("Connecting nodes error: ~p~n~p", [E, ST]),
             {reply, {error, E}}
     end;
 

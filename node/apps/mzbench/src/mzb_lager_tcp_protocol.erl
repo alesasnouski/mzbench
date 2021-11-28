@@ -4,7 +4,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/4]).
+-export([start_link/3]).
 
 %% gen_server
 -export([init/1,
@@ -17,8 +17,8 @@
 
 -record(state, {socket, transport}).
 
-start_link(Ref, Socket, Transport, Opts) ->
-    proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
+start_link(Ref, Transport, Opts) ->
+    proc_lib:start_link(?MODULE, init, [Ref, Transport, Opts]).
 
 dispatch(close_req, #state{socket = Socket, transport = Transport} = State) ->
     Transport:close(Socket),

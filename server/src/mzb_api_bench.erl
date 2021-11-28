@@ -170,7 +170,7 @@ init([Id, Params]) ->
         user_errors => 0,
         system_errors => 0
     },
-    info("Node repo: ~p", [NodeInstallSpec], State),
+    log_info("Node repo: ~p", [NodeInstallSpec], State),
     {ok, State}.
 
 workflow_config(_State) ->
@@ -205,7 +205,7 @@ handle_stage(pipeline, init, #{config:= Config} = State) ->
         _ -> ok
     end,
 
-    info("Starting benchmark~n~p", [Config], State);
+    log_info("Starting benchmark~n~p", [Config], State);
 
 handle_stage(pipeline, checking_script, #{config:= Config}) ->
     #{script:= #{body:= ScriptBody}} = Config,
@@ -227,8 +227,8 @@ handle_stage(pipeline, wait_exclusive, #{id:= Id, config:= Config}) ->
 handle_stage(pipeline, allocating_hosts, #{config:= Config} = State) ->
     {Hosts, UserName, Deallocator} = allocate_hosts(Config, get_logger(State)),
 
-    if length(Hosts) > 1 -> info("Allocated hosts: [~p] @~n~p", [UserName, Hosts], State);
-       true -> info("Allocated hosts: [~p] @ ~p", [UserName, Hosts], State)
+    if length(Hosts) > 1 -> log_info("Allocated hosts: [~p] @~n~p", [UserName, Hosts], State);
+       true -> log_info("Allocated hosts: [~p] @ ~p", [UserName, Hosts], State)
     end,
 
     fun (S) ->
@@ -283,7 +283,7 @@ handle_stage(pipeline, starting_collectors, #{cluster_connection:= Connection, n
     StartFun = fun (Call, Handler) ->
         mzb_lists:pmap(fun ({Node, Host}) ->
         {ok, Port} = director_call(Connection, {Call, Node}),
-        info("Log collector server: ~p -> ~p:~p", [Node, Host, Port], State),
+        log_info("Log collector server: ~p -> ~p:~p", [Node, Host, Port], State),
         mzb_api_connection:start_and_link_with(Self, logs, Host, Port,
             fun ({message, Msg}, S) -> {Handler({write, Msg}), S};
                 (_, S) -> {ok, S}
@@ -303,7 +303,7 @@ handle_stage(pipeline, pre_hooks, #{cluster_connection:= Connection, config:= Co
         catch
             error:{error, List} ->
                 ResStr = string:join(List, "\n"),
-                error("~s", [ResStr], State),
+                log_error("~s", [ResStr], State),
                 mzb_pipeline:error(validation_failed,
                                    fun (S) -> S#{result_str => ResStr} end)
 
@@ -324,7 +324,7 @@ handle_stage(pipeline, starting, #{cluster_connection:= Connection, config:= Con
         ok -> ok;
         {error, List} ->
             ResStr = mzb_string:format("Start failed: ~s", [string:join(List, "\n")]),
-            error(ResStr, [], State),
+            log_error(ResStr, [], State),
             mzb_pipeline:error(start_benchmark_failed,
                                fun (S) -> S#{result_str => ResStr} end)
     end;
@@ -332,17 +332,17 @@ handle_stage(pipeline, starting, #{cluster_connection:= Connection, config:= Con
 handle_stage(pipeline, running, #{cluster_connection:= Connection} = State) ->
     try director_call(Connection, get_results, infinity) of
         {ok, Str, {Metrics, Histograms}} ->
-            info("Benchmark result: SUCCESS~n~s", [Str], State),
+            log_info("Benchmark result: SUCCESS~n~s", [Str], State),
             Res = aggregate_results(Metrics, Histograms, State),
             fun (S) -> S#{results => Res, result_str => Str} end;
         {error, Reason, ReasonStr, {Metrics, Histograms}} ->
-            error("Benchmark result: FAILED~n~s", [ReasonStr], State),
+            log_error("Benchmark result: FAILED~n~s", [ReasonStr], State),
             Res = aggregate_results(Metrics, Histograms, State),
             mzb_pipeline:error({benchmark_failed, Reason}, fun (S) -> S#{results => Res, result_str => ReasonStr} end)
     catch
         _:Error ->
             ResStr = mzb_string:format("Benchmark result: EXCEPTION~n~p", [Error]),
-            error(ResStr, [], State),
+            log_error(ResStr, [], State),
             mzb_pipeline:error({benchmark_failed, Error},
                                fun (S) -> S#{result_str => ResStr} end)
     end;
@@ -389,35 +389,34 @@ handle_stage(finalize, sending_email_report, #{emails:= Emails} = State) ->
     case send_email_report(Emails, status(State)) of
         ok -> ok;
         {error, {Error, Stacktrace}} ->
-            error("Send report to ~p failed with reason: ~p~n~p", [Emails, Error, Stacktrace], State)
+            log_error("Send report to ~p failed with reason: ~p~n~p", [Emails, Error, Stacktrace], State)
     end;
 
 handle_stage(finalize, cleaning_nodes, #{config:= #{deallocate_after_bench:= false}} = State) ->
-    info("Skip cleaning nodes. Deallocate after bench is false", [], State);
+    log_info("Skip cleaning nodes. Deallocate after bench is false", [], State);
 handle_stage(finalize, cleaning_nodes,
     State = #{node_pids := NodePids, config:= Config = #{director_host:= DirectorHost}})
       when DirectorHost /= undefined ->
     mzb_api_provision:clean_nodes(NodePids, Config, get_logger(State));
 handle_stage(finalize, cleaning_nodes, State) ->
-    info("Skip cleaning nodes. Unknown nodes", [], State);
+    log_info("Skip cleaning nodes. Unknown nodes", [], State);
 
 handle_stage(finalize, release_exclusive, #{id:= Id, config:= Config}) ->
     Exclusive = mzb_bc:maps_get(exclusive, Config, []),
     mzb_api_exclusive:release(Id, Exclusive);
 
 handle_stage(finalize, deallocating_hosts, #{config:= #{deallocate_after_bench:= false}} = State) ->
-    info("Skip deallocation. Deallocate after bench is false", [], State);
+    log_info("Skip deallocation. Deallocate after bench is false", [], State);
 handle_stage(finalize, deallocating_hosts, #{deallocator:= undefined} = State) ->
-    info("Skip deallocation. Undefined deallocator.", [], State);
+    log_info("Skip deallocation. Undefined deallocator.", [], State);
 handle_stage(finalize, deallocating_hosts, #{deallocator:= Deallocator} = State) ->
     DeallocWrapper = fun () ->
         try
-            info("Deallocator has started", [], State),
+            log_info("Deallocator has started", [], State),
             Deallocator(),
             ok
-        catch _C:E ->
-            ST = erlang:get_stacktrace(),
-            error("Deallocation has failed with reason: ~p~nStacktrace: ~p", [E, ST], State),
+        catch _C:E:ST ->
+            log_error("Deallocation has failed with reason: ~p~nStacktrace: ~p", [E, ST], State),
             retry
         end
     end,
@@ -437,15 +436,15 @@ handle_call({request_report, Emails}, _, #{emails:= OldEmails} = State) ->
     {reply, ok, State#{emails:= OldEmails ++ Emails}};
 
 handle_call({change_env, Env}, From, #{status:= running, config:= Config, cluster_connection:= Connection} = State) ->
-    info("Change env req received: ~p~nOldEnv: ~p", [Env, maps:get(env, Config)], State),
+    log_info("Change env req received: ~p~nOldEnv: ~p", [Env, maps:get(env, Config)], State),
     Self = self(),
     director_async_call(Connection, {change_env, Env},
         fun ({result, Res}) ->
-                info("Received change_env response: ~p", [Res], State),
+                log_info("Received change_env response: ~p", [Res], State),
                 ok == Res andalso mzb_pipeline:cast(Self, {env_changed, Env}),
                 mzb_pipeline:reply(From, Res);
             ({exception, {C, E, ST}}) ->
-                error("Change env exception ~p:~p~n~p", [C, E, ST], State),
+                log_error("Change env exception ~p:~p~n~p", [C, E, ST], State),
                 mzb_pipeline:reply(From, {error, E})
         end),
     {noreply, State};
@@ -454,13 +453,13 @@ handle_call({change_env, _Env}, _From, #{} = State) ->
     {reply, {error, not_running}, State};
 
 handle_call({run_command, Pool, Percent, Command}, From, #{status:= running, cluster_connection:= Connection} = State) ->
-    info("Command run req received: ~p pool~p ~p%", [Command, Pool, Percent], State),
+    log_info("Command run req received: ~p pool~p ~p%", [Command, Pool, Percent], State),
     director_async_call(Connection, {run_command, Pool, Percent, Command},
         fun ({result, Res}) ->
-                info("Received run_command response: ~p", [Res], State),
+                log_info("Received run_command response: ~p", [Res], State),
                 mzb_pipeline:reply(From, Res);
             ({exception, {C, E, ST}}) ->
-                error("Run command exception ~p:~p~n~p", [C, E, ST], State),
+                log_error("Run command exception ~p:~p~n~p", [C, E, ST], State),
                 mzb_pipeline:reply(From, {error, E})
         end),
     {noreply, State};
@@ -469,19 +468,19 @@ handle_call({run_command, _, _, _}, _From, #{} = State) ->
     {reply, {error, not_running}, State};
 
 handle_call({update_name, NewName}, _From, #{config:= Config} = State) ->
-    info("Update bench name: ~p", [NewName], State),
+    log_info("Update bench name: ~p", [NewName], State),
     NewState = maps:put(config, maps:put(benchmark_name, NewName, Config), State),
     {reply, ok, NewState};
 
 handle_call({add_tags, Tags}, _From, #{config:= Config} = State) ->
-    info("Add tags: ~p / ~p", [Tags, mzb_bc:maps_get(tags, Config, [])], State),
+    log_info("Add tags: ~p / ~p", [Tags, mzb_bc:maps_get(tags, Config, [])], State),
     OldTags = mzb_bc:maps_get(tags, Config, []),
     NewTags = OldTags ++ [T || T <- Tags, not lists:member(T, OldTags)],
     NewState = maps:put(config, maps:put(tags, NewTags, Config), State),
     {reply, ok, NewState};
 
 handle_call({remove_tags, Tags}, _From, #{config:= Config} = State) ->
-    info("Remove tags: ~p", [Tags], State),
+    log_info("Remove tags: ~p", [Tags], State),
     NewTags = mzb_bc:maps_get(tags, Config, []) -- Tags,
     NewState = maps:put(config, maps:put(tags, NewTags, Config), State),
     {reply, ok, NewState};
@@ -490,7 +489,7 @@ handle_call(get_author, _From, #{config:= Config} = State) ->
     {reply, maps:get(author, Config), State};
 
 handle_call(_Request, _From, State) ->
-    error("Unhandled call: ~p", [_Request], State),
+    log_error("Unhandled call: ~p", [_Request], State),
     {noreply, State}.
 
 handle_cast({director_message, {new_metrics, NewMetrics}}, #{metrics:= Metrics, config:= Config} = State) ->
@@ -525,18 +524,18 @@ handle_cast({error_counter, inc_system}, #{system_errors:= OldValue} = State) ->
     {noreply, maybe_update_bench(State#{system_errors => OldValue + 1})};
 
 handle_cast(_Msg, State) ->
-    error("Unhandled cast: ~p", [_Msg], State),
+    log_error("Unhandled cast: ~p", [_Msg], State),
     {noreply, State}.
 
 handle_info({'EXIT', _, normal}, State) ->
     {noreply, State};
 
 handle_info({'EXIT', P, Reason}, State) ->
-    error("Benchmark received 'EXIT' from ~p with reason ~p, stopping", [P, Reason], State),
+    log_error("Benchmark received 'EXIT' from ~p with reason ~p, stopping", [P, Reason], State),
     {stop, Reason, State};
 
 handle_info(_Info, State) ->
-    error("Unhandled info: ~p", [_Info], State),
+    log_error("Unhandled info: ~p", [_Info], State),
     {noreply, State}.
 
 
@@ -545,7 +544,7 @@ terminate(normal, State) ->
     catch (maps:get(log_user_file_handler, State))(close);
 % something is going wrong there. use special status for bench and run finalize stages again
 terminate(Reason, #{id:= Id} = State) ->
-    error("Receive terminate while finalize is not completed: ~p", [Reason], State),
+    log_error("Receive terminate while finalize is not completed: ~p", [Reason], State),
     mzb_api_server:bench_finished(Id, status(State)),
     catch (maps:get(log_file_handler, State))(close),
     catch (maps:get(log_user_file_handler, State))(close),
@@ -562,16 +561,14 @@ terminate(Reason, #{id:= Id} = State) ->
                                     Res = handle_stage(finalize, Stage, NewState),
                                     Res
                                 catch
-                                    _C:E ->
-                                        ST = erlang:get_stacktrace(),
-                                        error("Stage 'finalize - ~s': failed~n~s", [Stage, format_error(Stage, {E, ST})], NewState)
+                                    _C:E:ST ->
+                                        log_error("Stage 'finalize - ~s': failed~n~s", [Stage, format_error(Stage, {E, ST})], NewState)
                                 end
                             end, Stages),
 
                 timer:cancel(Timer)
             catch
-                Class:Error ->
-                    Stacktrace= erlang:get_stacktrace(),
+                Class:Error:Stacktrace ->
                     lager:error("Finalizing process for #~p has crashed with reason: ~p~n~p", [Id, Error, Stacktrace]),
                     erlang:raise(Class, Error, Stacktrace)
             end
@@ -591,16 +588,16 @@ maybe_update_bench(State = #{previous_status:= OldStatus}) ->
     end.
 
 handle_pipeline_status_ll({start, Phase, Stage}, State) ->
-    info("Stage '~s - ~s': started", [Phase, Stage], State),
+    log_info("Stage '~s - ~s': started", [Phase, Stage], State),
     case Phase of
         pipeline -> State#{status => Stage};
         _ -> State
     end;
 handle_pipeline_status_ll({complete, Phase, Stage}, State) ->
-    info("Stage '~s - ~s': finished", [Phase, Stage], State),
+    log_info("Stage '~s - ~s': finished", [Phase, Stage], State),
     State;
 handle_pipeline_status_ll({exception, Phase, Stage, E, ST}, #{result_str:= ResStr} = State) ->
-    error("Stage '~s - ~s': failed~n~s", [Phase, Stage, format_error(Stage, {E, ST})], State),
+    log_error("Stage '~s - ~s': failed~n~s", [Phase, Stage, format_error(Stage, {E, ST})], State),
     case ResStr of
         "" ->
             Res = mzb_string:format("Stage ~p failed: ~p", [Stage, E]),
@@ -609,7 +606,7 @@ handle_pipeline_status_ll({exception, Phase, Stage, E, ST}, #{result_str:= ResSt
             State
     end;
 handle_pipeline_status_ll({final, Final}, State) ->
-    info("Bench final: ~s", [Final], State),
+    log_info("Bench final: ~s", [Final], State),
     State#{status => Final, finish_time => seconds()}.
 
 %%%===================================================================
@@ -682,8 +679,8 @@ send_email_report(Emails, #{id:= Id,
             end, Emails),
         ok
     catch
-        _:Error ->
-            {error, {Error, erlang:get_stacktrace()}}
+        _:Error:ST ->
+            {error, {Error, ST}}
     end;
 send_email_report(_Emails, Status) ->
     {error, {badarg, Status}}.
@@ -847,10 +844,10 @@ indent(Str, N) ->
     Spaces = [$\s || _ <- lists:seq(1, N)],
     string:join([Spaces ++ Line || Line <- string:tokens(Str, "\n")], "\n").
 
-info(Format, Args, State) ->
+log_info(Format, Args, State) ->
     log(info, Format, Args, State).
 
-error(Format, Args, State) ->
+log_error(Format, Args, State) ->
     log(error, Format, Args, State).
 
 log(Severity, Format, Args, #{log_file_handler:= H, id:= Id, self:= Self}) ->
@@ -1034,12 +1031,12 @@ aggregate_results(Metrics, Histograms, #{config:= Config} = State) ->
             try
                 aggregate_results_for_metric(M, Config, Percentiles, Histograms)
             catch
-                _:Error ->
-                    error("Aggregating result for ~p failed: ~p~nStacktrace: ~p", [M, Error, erlang:get_stacktrace()], State),
+                _:Error:ST ->
+                    log_error("Aggregating result for ~p failed: ~p~nStacktrace: ~p", [M, Error, ST], State),
                     []
             end
         end, Flatten),
-    info("Bench final metrics: ~300p", [Res], State),
+    log_info("Bench final metrics: ~300p", [Res], State),
     Res.
 
 aggregate_results_for_metric({Name, counter, _}, Config, Percentiles, _) ->

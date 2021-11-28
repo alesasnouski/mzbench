@@ -1,17 +1,19 @@
-FROM erlang:20.3.2-alpine
+FROM erlang:24.1-alpine
 
 # install packages
 RUN apk update && apk add --no-cache \
     bash \
     bc \
+    erlang-dev \
     g++ \
     git \
+    linux-headers \
     make \
     musl-dev \
     net-tools \
     openssh openssh-server \
     openssl \
-    py2-pip \
+    py-pip \
     rsync \
     wget \
     zlib-dev \
@@ -32,7 +34,9 @@ RUN  make -C /opt/mzbench/server clean \
  && find . -name "*.so" -or -name "*.o" | xargs -I{} rm {}
 
 # Compile and configure server
-RUN pip install -r requirements.txt \
+RUN pip install -r requirements.txt
+
+RUN rebar3 update \
  && make -C /opt/mzbench/server generate \
  && mkdir -p /etc/mzbench /root/.ssh \
  && echo "[{mzbench_api, [{network_interface, \"0.0.0.0\"},{listen_port, 80}]}]." > /etc/mzbench/server.config \
