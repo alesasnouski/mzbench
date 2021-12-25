@@ -33,7 +33,7 @@ script_metrics(Pools, _WorkerNodes) ->
         normalize(PoolMetrics ++ MZBenchInternal)
     catch
         _:Error:ST ->
-            system_log:error("Metrics declaration error: ~s", [mzb_script_metrics:format_error(Error)]),
+            logger:error("Metrics declaration error: ~s", [mzb_script_metrics:format_error(Error)]),
             erlang:raise(error, Error, ST)
     end.
 

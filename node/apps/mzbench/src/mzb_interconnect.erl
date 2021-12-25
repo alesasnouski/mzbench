@@ -97,7 +97,7 @@ multi_call(Nodes, Req, Timeout) ->
                 R -> {ok, {N, R}}
             catch
                 _:Reason:ST ->
-                    lager:error("Call ~p to ~p failed with reason: ~p~n~p", [Req, N, Reason, ST]),
+                    logger:error("Call ~p to ~p failed with reason: ~p~n~p", [Req, N, Reason, ST]),
                     {bad, N}
             end
         end, Nodes),
@@ -133,7 +133,7 @@ init([Handler]) ->
     {ok, #s{nodes = #{}, connection_monitors = #{}, handler = Handler}}.
 
 handle_call({accept, Node, Role, Owner, Sender}, _From, #s{nodes = Nodes, connection_monitors = Mons, role = MyRole} = State) ->
-    system_log:info("Connection to ~p established", [Node]),
+    logger:info("Connection to ~p established", [Node]),
     Ref = erlang:monitor(process, Owner),
     Director = case Role of
             director -> Node;
@@ -272,7 +272,7 @@ handle_cast({from_remote, {transit, To, Msg}}, #s{role = director} = State) ->
     {noreply, State};
 
 handle_cast({from_remote, {transit, To, Msg}}, State) ->
-    system_log:error("Transit message for ~p on non director node: ~p~nMessage: ~p", [To, node(), Msg]),
+    logger:error("Transit message for ~p on non director node: ~p~nMessage: ~p", [To, node(), Msg]),
     {noreply, State};
 
 handle_cast({from_remote, {reply, From, Res}}, State) ->
@@ -302,7 +302,7 @@ handle_cast(_Msg, State) ->
 handle_message(Msg, State) -> handle_message(Msg, fun (_) -> ok end, State).
 
 handle_message(Msg, _, #s{handler = undefined}) ->
-    system_log:warning("Ignoring msg due to undefined handler~nMessage: ~p", [Msg]),
+    logger:warning("Ignoring msg due to undefined handler~nMessage: ~p", [Msg]),
     noreply;
 handle_message(Msg, ReplyFun, #s{handler  = Handler}) ->
     try Handler(Msg, ReplyFun) of
@@ -310,7 +310,7 @@ handle_message(Msg, ReplyFun, #s{handler  = Handler}) ->
         noreply -> noreply
     catch
         _:E:ST ->
-            system_log:error("Handler for ~p has crashed at ~p: ~p~n~p", [Msg, node(), E, ST]),
+            logger:error("Handler for ~p has crashed at ~p: ~p~n~p", [Msg, node(), E, ST]),
             noreply
     end.
 
@@ -320,7 +320,7 @@ handle_info({'DOWN', Ref, _, _, Reason}, #s{nodes = Nodes,
                                             local_monitors = LMons} = State) ->
     case maps:find(Ref, Mons) of
         {ok, Node} ->
-            system_log:warning("Node ~p disconnected: ~p", [Node, Reason]),
+            logger:warning("Node ~p disconnected: ~p", [Node, Reason]),
 
             NewState = lists:foldl(
                 fun ({R, {Owner, Pid}}, Acc) ->
@@ -383,7 +383,7 @@ send_to(To, Msg, #s{role = Role, nodes = Nodes, director = Director}) ->
                 error -> erlang:error(node_not_found)
             end;
         error when Role == director ->
-            system_log:warning("Skip msg for unknown node: ~p~nMessage: ~p", [To, Msg]),
+            logger:warning("Skip msg for unknown node: ~p~nMessage: ~p", [To, Msg]),
             ok
     end.
 

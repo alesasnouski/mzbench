@@ -121,15 +121,15 @@ handle_call({create, Name}, _From, State) ->
     {reply, init_hist(Name), State};
 
 handle_call(Req, _From, State) ->
-    lager:error("Unhandled call: ~p", [Req]),
+    logger:error("Unhandled call: ~p", [Req]),
     {stop, {unhandled_call, Req}, State}.
 
 handle_cast(Msg, State) ->
-    lager:error("Unhandled cast: ~p", [Msg]),
+    logger:error("Unhandled cast: ~p", [Msg]),
     {stop, {unhandled_cast, Msg}, State}.
 
 handle_info(Info, State) ->
-    lager:error("Unhandled info: ~p", [Info]),
+    logger:error("Unhandled info: ~p", [Info]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->

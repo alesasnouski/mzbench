@@ -164,7 +164,7 @@ handle_call({local_subscribe, Metric, Callback}, _From,
     {reply, ok, State#s{metrics_subscribers = NewSubscribers}};
 
 handle_call(Req, _From, State) ->
-    system_log:error("Unhandled call: ~p", [Req]),
+    logger:error("Unhandled call: ~p", [Req]),
     {stop, {unhandled_call, Req}, State}.
 
 handle_cast({declare_metrics, Groups}, #s{metric_groups = OldGroups} = State) ->
@@ -176,12 +176,12 @@ handle_cast({declare_metrics, Groups}, #s{metric_groups = OldGroups} = State) ->
             {noreply, State#s{metric_groups = NewGroups}}
     catch
         error:Error ->
-            system_log:error("Metrics declaration error: ~s", [mzb_script_metrics:format_error(Error)]),
+            logger:error("Metrics declaration error: ~s", [mzb_script_metrics:format_error(Error)]),
             {noreply, State}
     end;
 
 handle_cast(Msg, State) ->
-    system_log:error("Unhandled cast: ~p", [Msg]),
+    logger:error("Unhandled cast: ~p", [Msg]),
     {stop, {unhandled_cast, Msg}, State}.
 
 handle_info(trigger, State = #s{active = false, update_interval_ms = IntervalMs}) ->
@@ -192,7 +192,7 @@ handle_info(trigger, State = #s{active = true, update_interval_ms = IntervalMs})
     erlang:send_after(IntervalMs, self(), trigger),
     {noreply, NewState};
 handle_info(Info, State) ->
-    system_log:error("Unhandled info: ~p", [Info]),
+    logger:error("Unhandled info: ~p", [Info]),
     {noreply, State}.
 
 terminate(_Reason, State) ->
@@ -211,7 +211,7 @@ tick(#s{last_tick_time = LastTick} = State) ->
     TimeSinceTick = timer:now_diff(Now, LastTick),
     case TimeSinceTick of
         0 ->
-            system_log:info("[ metrics ] Tick dropped because its timestamp is equal to the previous one.", []),
+            logger:info("[ metrics ] Tick dropped because its timestamp is equal to the previous one.", []),
             State;
         _ ->
             State1 = aggregate_metrics(State),
@@ -233,7 +233,7 @@ aggregate_metrics(#s{nodes = Nodes, metric_groups = MetricGroups, histograms = H
         fun (N) ->
             case mzb_interconnect:call(N, {get_local_metrics_values, extract_metrics(MetricGroups)}) of
                 {badrpc, Reason} ->
-                    system_log:error("[ metrics ] Failed to request metrics from node ~p (~p)", [N, Reason]),
+                    logger:error("[ metrics ] Failed to request metrics from node ~p (~p)", [N, Reason]),
                     erlang:error({request_metrics_failed, N, Reason});
                 Res ->
                     Res
@@ -267,10 +267,10 @@ evaluate_derived_metrics(#s{metric_groups = MetricGroups} = State) ->
             undefined -> ok; % nothing was calculated
             Val -> global_set(Name, gauge, Val)
         catch
-            _:Reason:ST -> system_log:error("Failed to evaluate derived metrics:~nWorker: ~p~nFunction: ~p~nReason: ~p~nStacktrace: ~p~n", [Worker, Resolver, Reason, ST])
+            _:Reason:ST -> logger:error("Failed to evaluate derived metrics:~nWorker: ~p~nFunction: ~p~nReason: ~p~nStacktrace: ~p~n", [Worker, Resolver, Reason, ST])
         end
     end, DerivedMetrics),
-    system_log:debug("[ metrics ] Current metrics values:~n~s", [format_global_metrics()]),
+    logger:debug("[ metrics ] Current metrics values:~n~s", [format_global_metrics()]),
     NewState.
 
 check_dynamic_deadlock(#s{} = State) ->
@@ -287,26 +287,26 @@ check_dynamic_deadlock(#s{} = State) ->
     end.
 
 check_assertions(TimePeriod, #s{asserts = Asserts, assert_accuracy_ms = AccuracyMs, env = Env} = State) ->
-    system_log:info("[ metrics ] CHECK ASSERTIONS:"),
+    logger:info("[ metrics ] CHECK ASSERTIONS:"),
     NewAsserts = mzbl_asserts:update_state(TimePeriod, Asserts, Env),
-    system_log:info("Current assertions:~n~s", [mzbl_asserts:format_state(NewAsserts)]),
+    logger:info("Current assertions:~n~s", [mzbl_asserts:format_state(NewAsserts)]),
 
     FailedAsserts = mzbl_asserts:get_failed(_Finished = false, AccuracyMs, NewAsserts),
     case FailedAsserts of
         [] -> ok;
         _  ->
-            system_log:error("Interrupting benchmark because of failed asserts:~n~s", [string:join([Str|| {_, Str} <- FailedAsserts], "\n")]),
+            logger:error("Interrupting benchmark because of failed asserts:~n~s", [string:join([Str|| {_, Str} <- FailedAsserts], "\n")]),
             mzb_director:notify({assertions_failed, FailedAsserts})
     end,
     State#s{asserts = NewAsserts}.
 
 check_signals(#s{nodes = Nodes} = State) ->
-    system_log:info("[ metrics ] CHECK SIGNALS:"),
+    logger:info("[ metrics ] CHECK SIGNALS:"),
     RawSignals = mzb_lists:pmap(
         fun (N) ->
             case mzb_interconnect:call(N, get_all_signals) of
                 {badrpc, Reason} ->
-                    system_log:error("[ metrics ] Failed to request signals from node ~p (~p)", [N, Reason]),
+                    logger:error("[ metrics ] Failed to request signals from node ~p (~p)", [N, Reason]),
                     [];
                 Res ->
                     Res
@@ -315,7 +315,7 @@ check_signals(#s{nodes = Nodes} = State) ->
     GroupedSignals = groupby(lists:flatten(RawSignals)),
     Signals = [{N, lists:max(Counts)} || {N, Counts} <- GroupedSignals],
     _ = [signal_to_metric(N, Value) || {N, Value} <- Signals],
-    system_log:info("List of currently registered signals:~n~s", [format_signals_count(Signals)]),
+    logger:info("List of currently registered signals:~n~s", [format_signals_count(Signals)]),
     State.
 
 notify_metrics_subscribers(#s{metrics_subscribers = Subscribers} = State) ->

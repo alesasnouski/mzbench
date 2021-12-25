@@ -40,8 +40,6 @@ run_script(Script, Env) ->
     ok = application:start(inets),
     {ok, _} = net_kernel:start([nodename_gen(), shortnames]),
 
-    setup_logger([{lager_console_backend, info}]),
-
     {ok, _} = application:ensure_all_started(mzbench),
 
     mzb_interconnect:set_director([]),
@@ -87,12 +85,6 @@ usage() ->
     io:format("Usage: ~s ScriptName [--validate] [--env name=value...]~n", [escript:script_name()]).
 
 setup_logger(Handlers) ->
-    ok = application:load(lager),
-    ok = application:set_env(lager, handlers, Handlers),
-    ok = application:set_env(lager, crash_log, undefined),
-    ok = application:set_env(lager, extra_sinks, [{system_log_lager_event, [{handlers, Handlers}]}]),
-    {ok, _} = application:ensure_all_started(lager),
-
     application:load(sasl),
     application:set_env(sasl, sasl_error_logger, {file, "/dev/null"}),
     {ok, _} = application:ensure_all_started(sasl).

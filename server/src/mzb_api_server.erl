@@ -268,7 +268,7 @@ get_boundaries([#{id:= Max}|_] = L) ->
 
 
 email_report(Id, Emails) ->
-    lager:info("[ SERVER ] Report req for #~b for emails: ~p", [Id, Emails]),
+    logger:info("[ SERVER ] Report req for #~b for emails: ~p", [Id, Emails]),
     Status = case ets:lookup(benchmarks, Id) of
         [{_, _BenchPid, undefined}] ->
             erlang:error({badarg, "Benchmark in not ended yet"});
@@ -279,7 +279,7 @@ email_report(Id, Emails) ->
     case mzb_api_bench:send_email_report(Emails, Status) of
         ok -> ok;
         {error, {Error, Stacktrace}} ->
-            lager:error("Send report to ~p failed with reason: ~p~n~p",
+            logger:error("Send report to ~p failed with reason: ~p~n~p",
                         [Emails, Error, Stacktrace]),
             erlang:error(Error)
     end.
@@ -303,7 +303,7 @@ init([]) ->
     User = sys_username(),
     {ok, MaxBenchNum} = application:get_env(mzbench_api, max_bench_num),
     {ok, _} = dets:open_file(dashboards, [{file, filename:join(ServerDir, "dashboards")}, {type, set}]),
-    lager:info("Server username: ~p", [User]),
+    logger:info("Server username: ~p", [User]),
 
     {ok, check_max_bench_num(#{next_id => MaxId + 1,
            monitors => #{},
@@ -326,11 +326,11 @@ handle_call({start_bench, Params}, _From, #{status:= active, data_dir:= DataDir}
     end;
 
 handle_call({start_bench, Params}, _From, #{status:= inactive} = State) ->
-    lager:info("[ SERVER ] Start of bench failed because server is inactive ~p", [Params]),
+    logger:info("[ SERVER ] Start of bench failed because server is inactive ~p", [Params]),
     {reply, {error, server_inactive}, State};
 
 handle_call({restart_bench, RestartId, UserInfo}, _From, #{status:= active, data_dir:= DataDir} = State) ->
-    lager:info("[ SERVER ] Restarting bench #~b", [RestartId]),
+    logger:info("[ SERVER ] Restarting bench #~b", [RestartId]),
     RestartIdStr = erlang:integer_to_list(RestartId),
     ParamsFile = filename:join([DataDir, RestartIdStr, "params.bin"]),
     case file:read_file(ParamsFile) of
@@ -355,7 +355,7 @@ handle_call({restart_bench, RestartId, UserInfo}, _From, #{status:= active, data
     end;
 
 handle_call({restart_bench, RestartId, _}, _From, #{status:= inactive} = State) ->
-    lager:info("[ SERVER ] Restart of bench failed because server is inactive #~p", [RestartId]),
+    logger:info("[ SERVER ] Restart of bench failed because server is inactive #~p", [RestartId]),
     {reply, {error, server_inactive}, State};
 
 handle_call(deactivate, _From, #{} = State) ->
@@ -363,12 +363,12 @@ handle_call(deactivate, _From, #{} = State) ->
         fun ({_, Pid, _}, Acc) when is_pid(Pid) -> [Pid | Acc];
             (_, Acc) -> Acc
         end, [], benchmarks),
-    lager:info("[ SERVER ] Stopping all benchmarks due to server stop: ~p", [Unfinished]),
+    logger:info("[ SERVER ] Stopping all benchmarks due to server stop: ~p", [Unfinished]),
     [ok = mzb_api_bench:interrupt_bench(P) || P <- Unfinished],
     {reply, ok, State#{status:= inactive}};
 
 handle_call({stop_bench, Id}, _, #{} = State) ->
-    lager:info("[ SERVER ] Stop bench #~b request received", [Id]),
+    logger:info("[ SERVER ] Stop bench #~b request received", [Id]),
     case ets:lookup(benchmarks, Id) of
         [{_, BenchPid, undefined}] ->
             {reply, mzb_api_bench:interrupt_bench(BenchPid), State};
@@ -428,16 +428,16 @@ handle_call({remove_tags, Id, Tags}, _, State) ->
     end;
 
 handle_call(_Request, _From, State) ->
-    lager:error("Unhandled call: ~p", [_Request]),
+    logger:error("Unhandled call: ~p", [_Request]),
     {noreply, State}.
 
 handle_cast({bench_finished, Id, Status}, State) ->
-    lager:info("[ SERVER ] Bench #~b finished with status ~p", [Id, maps:get(status, Status)]),
+    logger:info("[ SERVER ] Bench #~b finished with status ~p", [Id, maps:get(status, Status)]),
     save_results(Id, Status, State),
     {noreply, State};
 
 handle_cast(_Msg, State) ->
-    lager:error("Unhandled cast: ~p", [_Msg]),
+    logger:error("Unhandled cast: ~p", [_Msg]),
     {noreply, State}.
 
 handle_info({'DOWN', Ref, process, Pid, normal}, #{monitors:= Mons} = State) ->
@@ -446,14 +446,14 @@ handle_info({'DOWN', Ref, process, Pid, normal}, #{monitors:= Mons} = State) ->
             true = ets:update_element(benchmarks, Id, {2, undefined}),
             {noreply, State#{monitors => maps:remove(Ref, Mons)}};
         error ->
-            lager:error("Received DOWN from unknown process ~p", [Pid]),
+            logger:error("Received DOWN from unknown process ~p", [Pid]),
             {noreply, State}
     end;
 
 handle_info({'DOWN', Ref, process, Pid, Reason}, #{monitors:= Mons} = State) ->
     case maps:find(Ref, Mons) of
         {ok, Id} ->
-            lager:error("Benchmark process #~b ~p has crashed with reason: ~p", [Id, Pid, Reason]),
+            logger:error("Benchmark process #~b ~p has crashed with reason: ~p", [Id, Pid, Reason]),
             true = ets:update_element(benchmarks, Id, {2, undefined}),
             case ets:lookup(benchmarks, Id) of
                 [{_, _, undefined}] ->
@@ -465,12 +465,12 @@ handle_info({'DOWN', Ref, process, Pid, Reason}, #{monitors:= Mons} = State) ->
             end,
             {noreply, State#{monitors => maps:remove(Ref, Mons)}};
         error ->
-            lager:error("Received DOWN from unknown process ~p", [Pid]),
+            logger:error("Received DOWN from unknown process ~p", [Pid]),
             {noreply, State}
     end;
 
 handle_info(_Info, State) ->
-    lager:error("Unhandled info: ~p", [_Info]),
+    logger:error("Unhandled info: ~p", [_Info]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->
@@ -483,7 +483,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 start_bench_child(Params, #{next_id:= Id, monitors:= Mons, user:= User} = State) ->
-    lager:info("[ SERVER ] Start bench #~b", [Id]),
+    logger:info("[ SERVER ] Start bench #~b", [Id]),
     case supervisor:start_child(benchmarks_sup, [Id, Params#{user => User}]) of
         {ok, Pid} ->
             Mon = erlang:monitor(process, Pid),
@@ -517,11 +517,11 @@ check_max_bench_num(#{max_bench_num:= MaxNum, next_id:= NextId, data_dir:= Dir} 
                         ok;
                     false ->
                         BenchDir = filename:join(Dir, erlang:integer_to_list(Id)),
-                        lager:info("Deleting bench #~b", [Id]),
+                        logger:info("Deleting bench #~b", [Id]),
                         case mzb_file:del_dir(BenchDir) of
                             ok -> ets:delete(benchmarks, Id);
                             {error, Reason} ->
-                                lager:error("Delete directory ~p failed: ~p", [BenchDir, Reason])
+                                logger:error("Delete directory ~p failed: ~p", [BenchDir, Reason])
                         end
                 end
         end, [], benchmarks),
@@ -539,7 +539,7 @@ save_results(Id, Status, State) ->
         true = ets:update_element(benchmarks, Id, {3, Status})
     catch
         _:Error:ST ->
-            lager:error("Save bench #~b results failed with reason: ~p~n~p", [Id, Error, ST])
+            logger:error("Save bench #~b results failed with reason: ~p~n~p", [Id, Error, ST])
     end.
 
 write_status(Id, Status, #{data_dir:= Dir}) ->
@@ -548,7 +548,7 @@ write_status(Id, Status, #{data_dir:= Dir}) ->
     ok = file:write_file(Filename, io_lib:format("~p.", [Status])).
 
 import_data(Dir) ->
-    lager:info("Importing server data from ~s", [Dir]),
+    logger:info("Importing server data from ~s", [Dir]),
 
     WC = filename:join(Dir, "*"),
 
@@ -563,7 +563,7 @@ import_data(Dir) ->
             max(Id, Max)
         catch
             _:Error:ST ->
-                lager:error("Parsing status filename ~s failed with reason: ~p~n~p", [File, Error, ST]),
+                logger:error("Parsing status filename ~s failed with reason: ~p~n~p", [File, Error, ST]),
                 Max
         end
     end,
@@ -575,7 +575,7 @@ import_bench_status(Id, File) ->
         #{status:= _, start_time := _, finish_time := _, config := #{}} = Status,
         ets:insert(benchmarks, {Id, undefined, Status})
     catch _:E:ST ->
-        lager:error("Import from file ~s failed with reason: ~p~n~p", [File, E, ST])
+        logger:error("Import from file ~s failed with reason: ~p~n~p", [File, E, ST])
     end.
 
 sys_username() ->
@@ -610,7 +610,7 @@ add_parent_resources(Params, DataDir) ->
                     NewIncludes = Includes ++ [{F, D} || {F, D} <- ParentIncludes, not lists:member(F, ExistingFiles)],
                     Params#{includes => NewIncludes};
                 {error, ErrorReason} ->
-                    lager:error("Failed to read parent benchmark #~p (file ~p) cause ~p", [Parent, ParamsFile, ErrorReason]),
+                    logger:error("Failed to read parent benchmark #~p (file ~p) cause ~p", [Parent, ParamsFile, ErrorReason]),
                     Params
             end
     end.

@@ -126,7 +126,7 @@ wait_python_stop(PythonPort, Acc) ->
         {PythonPort, eof} ->
             case length(Acc) of
                 0 -> ok;
-                _ -> lager:info(Acc, [])
+                _ -> logger:info(Acc, [])
             end,
             receive
                 {PythonPort, {exit_status, _Status}} ->
@@ -134,7 +134,7 @@ wait_python_stop(PythonPort, Acc) ->
                     ok
             end;
         {PythonPort, {data, {eol, Line}}} ->
-            lager:info(Acc ++ Line, []),
+            logger:info(Acc ++ Line, []),
             wait_python_stop(PythonPort, "");
         {PythonPort, {data, {noeol, Line}}} ->
             wait_python_stop(PythonPort, Acc ++ Line)
@@ -152,17 +152,17 @@ read_python_output(#python_interpreter{python_port = PythonPort, metrics_pipe = 
                         PythonAcc, MetricsAcc) ->
     receive
         {PythonPort, {data, {eol, Line}}} ->
-            lager:info(PythonAcc ++ Line, []),
+            logger:info(PythonAcc ++ Line, []),
             read_python_output(Interpreter, "", MetricsAcc);
         {PythonPort, {data, {noeol, Line}}} ->
             read_python_output(Interpreter, PythonAcc ++ Line, MetricsAcc);
         {PythonPort, {exit_status, _Status}} ->
             case length(PythonAcc) of
                 0 -> ok;
-                _ -> system_log:info(PythonAcc),
+                _ -> logger:info(PythonAcc),
                     ok
             end,
-            system_log:error("Python interpreter finished unexpectedly!"),
+            logger:error("Python interpreter finished unexpectedly!"),
             erlang:error(python_interpreter_died);
         {MetricsPipe, {data, {eol, Line}}} ->
             case interpret_metrics_pipe(MetricsAcc ++ Line) of
@@ -186,10 +186,10 @@ read_python_output(#python_interpreter{python_port = PythonPort, metrics_pipe = 
         {MetricsPipe, closed} ->
             case length(MetricsAcc) of
                 0 -> ok;
-                _ -> system_log:info(MetricsAcc),
+                _ -> logger:info(MetricsAcc),
                     ok
             end,
-            system_log:error("Metrics communication pipe closed unexpectedly!"),
+            logger:error("Metrics communication pipe closed unexpectedly!"),
             erlang:error(metrics_pipe_closed)
     end.
 

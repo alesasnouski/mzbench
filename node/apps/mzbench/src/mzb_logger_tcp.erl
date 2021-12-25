@@ -1,4 +1,4 @@
--module(mzb_lager_tcp).
+-module(mzb_logger_tcp).
 
 -behaviour(gen_event).
 
@@ -24,13 +24,13 @@
 -define(INTERVAL, 100). % in ms
 
 init([Level, Sock, MessageQLenLimit, RateLimit, ErrorMetric]) ->
-    system_log:info("Started tcp lager backend for ~p ~p", [Level, Sock]),
+    logger:info("Started tcp logger backend for ~p ~p", [Level, Sock]),
     erlang:process_flag(trap_exit, true),
     Formatter = lager_default_formatter,
     FormatterConfig = ?TERSE_FORMAT,
     RateLimit > 0 andalso erlang:send_after(?INTERVAL, self(), trigger_rate_limiter),
     mzb_metrics:notify(ErrorMetric, 0),
-    {ok, #state{level=lager_util:config_to_mask(Level),
+    {ok, #state{level=Level,
             formatter=Formatter,
             format_config=FormatterConfig,
             colors=[],
@@ -41,14 +41,6 @@ init([Level, Sock, MessageQLenLimit, RateLimit, ErrorMetric]) ->
 
 handle_call(get_loglevel, #state{level=Level} = State) ->
     {ok, Level, State};
-handle_call({set_loglevel, Level}, State) ->
-   try lager_util:config_to_mask(Level) of
-        Levels ->
-            {ok, ok, State#state{level=Levels}}
-    catch
-        _:_ ->
-            {ok, {error, bad_log_level}, State}
-    end;
 handle_call(_Request, State) ->
     {ok, ok, State}.
 
@@ -114,7 +106,7 @@ handle_info(_Info, State) ->
     {ok, State}.
 
 terminate(Reason, #state{socket = S} = _State) ->
-    system_log:info("Terminated tcp lager backend for ~p with reason ~p", [S, Reason]),
+    logger:info("Terminated tcp lager backend for ~p with reason ~p", [S, Reason]),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

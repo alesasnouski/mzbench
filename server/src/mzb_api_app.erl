@@ -32,26 +32,26 @@ start_http_server() ->
     {ok, CowboyInterface} = inet_parse:address(CowboyInterfaceStr),
     {ok, CowboyPort} = application:get_env(mzbench_api, listen_port),
     {ok, Protocol} =  application:get_env(mzbench_api, protocol),
-    lager:info("Starting cowboy ~p listener on ~p:~p", [Protocol, CowboyInterface, CowboyPort]),
+    logger:info("Starting cowboy ~p listener on ~p:~p", [Protocol, CowboyInterface, CowboyPort]),
     Params = [{port, CowboyPort}, {ip, CowboyInterface}],
-    Env = [{env, [{dispatch, Dispatch}]}],
+    Env = #{env => #{dispatch => Dispatch}},
     {ok, _} = case Protocol of
-        http -> cowboy:start_http(http, 100, Params, Env);
+        http -> cowboy:start_clear(http_api, Params, Env);
         https ->
             {ok, CertFile} = application:get_env(mzbench_api, certfile),
             {ok, KeyFile} = application:get_env(mzbench_api, keyfile),
             CACertInList =  case application:get_env(mzbench_api, certfile, none) of
                                 none -> [];
-                                F -> [{cacertfile, mzb_file:expand_filename(F)}]
+                                F -> [{certfile, mzb_file:expand_filename(F)}]
                             end,
-            cowboy:start_https(https, 100, Params ++ CACertInList
+            cowboy:start_tls(https_api, Params ++ CACertInList
                                 ++ [{certfile, mzb_file:expand_filename(CertFile)},
                                     {keyfile, mzb_file:expand_filename(KeyFile)}], Env)
         end,
     ok.
 
 prep_stop(State) ->
-    lager:warning("Server is going to shutdown!"),
+    logger:warning("Server is going to shutdown!"),
     mzb_api_firehose:notify(danger, "Server is going to shutdown!"),
     %% deactivate stops all benchmarks. we are waiting 120 secs 
     %% to be sure that benchmark's finalize are finished
@@ -60,7 +60,7 @@ prep_stop(State) ->
     State.
 
 stop(_State) ->
-    lager:warning("Server is stopping..."),
+    logger:warning("Server is stopping..."),
     ok = cowboy:stop_listener(http),
     ok.
 
@@ -70,11 +70,11 @@ wait_benchmarks_finish(Attempts) ->
     BenchmarksNum = length(Benchmarks),
     case BenchmarksNum > 0 of
         true  ->
-            lager:info("Waiting for: ~p", [Benchmarks]),
+            logger:info("Waiting for: ~p", [Benchmarks]),
             timer:sleep(1000),
             wait_benchmarks_finish(Attempts - 1);
         false ->
-            lager:info("All benchmarks finished"),
+            logger:info("All benchmarks finished"),
             ok
     end.
 
@@ -102,7 +102,7 @@ load_config(File, AppName) ->
     case file:consult(mzb_file:expand_filename(File)) of
         {ok, [Config]} ->
             lists:foreach(fun ({App, Env}) when App == AppName ->
-                                lager:info("Reading configuration from ~s for ~s~n~p", [File, AppName, Env]),
+                                logger:info("Reading configuration from ~s for ~s~n~p", [File, AppName, Env]),
                                 [ application:set_env(App, Key, Val) || {Key, Val} <- Env];
                               (_) -> ok
                           end, Config),
@@ -116,13 +116,12 @@ load_cloud_plugin() ->
     ok = filelib:ensure_dir(filename:join(Dir, ".")),
     PluginPaths = mzb_file:wildcard(filename:join([Dir, "*", "ebin"])),
     ok = code:add_pathsa(PluginPaths),
-    lager:info("PATHS: ~p", [code:get_path()]),
+    logger:info("PATHS: ~p", [code:get_path()]),
     ok.
 
-% We can't call lager:Severity(...) because lager uses parse_transform
 default_logger() ->
-    fun (debug, F, A) -> lager:debug(F, A);
-        (info, F, A) -> lager:info(F, A);
-        (error, F, A) -> lager:error(F, A)
+    fun (debug, F, A) -> logger:debug(F, A);
+        (info, F, A) -> logger:info(F, A);
+        (error, F, A) -> logger:error(F, A)
     end.
 

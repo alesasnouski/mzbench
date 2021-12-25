@@ -7,10 +7,10 @@
 -spec init(cowboy_req:req(), any()) -> {ok, cowboy_req:req(), term()}.
 init(Req, _Opts) ->
     try
-        lager:debug("REQUEST: ~p", [Req]),
+        logger:debug("REQUEST: ~p", [Req]),
         Path = cowboy_req:path(Req),
         Method = cowboy_req:method(Req),
-        lager:info("[ ~s ] ~s", [Method, Path]),
+        logger:info("[ ~s ] ~s", [Method, Path]),
         UserInfo = authorize(Method, Path, Req),
         handle(Method, Path, UserInfo, Req)
     catch
@@ -43,7 +43,7 @@ init(Req, _Opts) ->
         _:E:ST ->
             Description = io_lib:format("Server Internal Error: ~p~n~nReq: ~p~n~nStacktrace: ~p", [E, Req, ST]),
             Req2 = reply_error(500, <<"internal_error">>, Description, Req),
-            lager:error(Description),
+            logger:error(Description),
             {ok, Req2, #{}}
     end.
 
@@ -68,7 +68,7 @@ handle(<<"GET">>, <<"/github_auth">>, _, Req) ->
                 cowboy_req:set_resp_cookie(mzb_api_auth:cookie_name(), Ref,
                     [{http_only, true}], Req);
             {error, Reason} ->
-                lager:error("Authentication error: ~p", [Reason]),
+                logger:error("Authentication error: ~p", [Reason]),
                 Req
         end,
     % we have to return redirect in any case because user is being redirected from github to ./github_auth
@@ -117,7 +117,7 @@ handle(<<"POST">>, <<"/auth">>, _, Req) ->
             end;
 
         _ ->
-            {ok, Code, Req2} = cowboy_req:body(Req),
+            {ok, Code, Req2} = cowboy_req:read_body(Req),
 
             case mzb_api_auth:auth_connection(undefined, binary_to_list(Type), Code) of
                 {ok, Ref, UserInfo} ->
@@ -132,7 +132,7 @@ handle(<<"POST">>, <<"/auth">>, _, Req) ->
                                 picture_url => list_to_binary(maps:get(picture_url, UserInfo))
                              }}, Req3), #{}};
                 {error, Reason} ->
-                    lager:error("Authentication error: ~p", [Reason]),
+                    logger:error("Authentication error: ~p", [Reason]),
                     erlang:error(forbidden)
             end
     end;
@@ -364,7 +364,7 @@ handle(<<"GET">>, <<"/remove_tags">>, _UserInfo, Req) ->
     end);
 
 handle(Method, Path, UserInfo, Req) ->
-    lager:error("Unknown request from ~p: ~p ~p~n~p", [maps:get(login, UserInfo), Method, Path, Req]),
+    logger:error("Unknown request from ~p: ~p ~p~n~p", [maps:get(login, UserInfo), Method, Path, Req]),
     erlang:error({not_found, io_lib:format("Wrong endpoint: ~p ~p", [Method, Path])}).
 
 with_bench_id(Req, Action) ->
@@ -385,16 +385,16 @@ with_bench_id(Req, Action) ->
 info({log, Msg}, Req, State) ->
     % this code is executed when you write something to log
     % so please don't log inside the function
-    ok = cowboy_req:chunk([Msg], Req),
+    ok = cowboy_req:stream_body(Msg, Req),
     {ok, Req, State}.
 
 terminate(_Reason, _Req, #{lager_backend_id:= Id}) ->
-    gen_event:delete_handler(lager_event, Id, []);
+    gen_event:delete_handler(logger_event, Id, []);
 terminate(_Reason, _Req, _State) ->
     ok.
 
 multipart(Req, Res) ->
-    case cowboy_req:part(Req) of
+    case cowboy_req:read_part(Req) of
         {ok, Headers, Req2} ->
             {ok, Body, Req3} = read_big_file(Req2),
             {file, Field, Filename, _CT, _Enc} = cow_multipart:form_data(Headers),
@@ -407,20 +407,20 @@ read_big_file(Req) ->
     read_big_file(Req, <<>>).
 
 read_big_file(Req, Acc) ->
-    case cowboy_req:part_body(Req) of
+    case cowboy_req:read_part_body(Req) of
         {ok, Body, Req2} -> {ok, <<Acc/binary, Body/binary>>, Req2};
         {more, Body, Req2} -> read_big_file(Req2, <<Acc/binary, Body/binary>>)
     end.
 
 reply_json(Code, Map, Req) ->
     case Code of
-        200 -> lager:info( "[ RESPONSE ] : ~p ~p", [Code, Map]);
-        _   -> lager:error("[ RESPONSE ] : ~p ~p~n~p", [Code, Map, Req])
+        200 -> logger:info( "[ RESPONSE ] : ~p ~p", [Code, Map]);
+        _   -> logger:error("[ RESPONSE ] : ~p ~p~n~p", [Code, Map, Req])
     end,
-    cowboy_req:reply(Code, [{<<"content-type">>, <<"application/json">>}], jiffy:encode(Map), Req).
+    cowboy_req:reply(Code, #{<<"content-type">> => <<"application/json">>}, jiffy:encode(Map), Req).
 
 reply_redirect(Code, URI, Req) ->
-    lager:info("[ REDIRECT ] ~p -> ~p", [Code, URI]),
+    logger:info("[ REDIRECT ] ~p -> ~p", [Code, URI]),
     cowboy_req:reply(Code, [{<<"Location">>, iolist_to_binary(URI)}], <<"Authenticated">>, Req).
 
 reply_error(HttpCode, Code, Description, Req) ->
@@ -593,12 +593,10 @@ stream_from_file(File, Compression, BenchId, Req) ->
     case IsFinished() of
         true ->
             {ok, #file_info{size = FileSize}} = file:read_file_info(File),
-            F = fun (Socket, Transport) -> Transport:sendfile(Socket, File) end,
-            Req2 = cowboy_req:set_resp_body_fun(FileSize, F, Req),
-            cowboy_req:reply(200, Headers, Req2);
+            cowboy_req:reply(200, Headers, {sendfile, 0, FileSize, File}, Req);
         false ->
-            Req2 = cowboy_req:chunked_reply(200, Headers, Req),
-            Streamer = fun (Bin) -> cowboy_req:chunk(Bin, Req2) end,
+            Req2 = cowboy_req:stream_reply(200, Headers, Req),
+            Streamer = fun (Bin) -> cowboy_req:stream_body(Bin, Req2) end,
             ReadAtOnce = application:get_env(mzbench_api, bench_read_at_once, undefined),
             {ok, H} = file:open(File, [raw, read, binary, {read_ahead, ReadAtOnce}]),
             try
@@ -638,8 +636,8 @@ stream_metrics_from_files(Files, BenchId, Req) ->
             mzb_api_server:is_datastream_ended(BenchId)
         end,
 
-    Req2 = cowboy_req:chunked_reply(200, Headers, Req),
-    Streamer = fun (Bin) -> cowboy_req:chunk(Bin, Req2) end,
+    Req2 = cowboy_req:stream_reply(200, Headers, Req),
+    Streamer = fun (Bin) -> cowboy_req:stream_body(Bin, Req2) end,
     ReadAtOnce = application:get_env(mzbench_api, bench_read_at_once, undefined),
     hd(mzb_lists:pmap(
         fun ({Name, File}) ->

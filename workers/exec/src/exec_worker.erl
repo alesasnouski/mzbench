@@ -43,13 +43,13 @@ execute(State = #{statsd_spawned := StatsdSpawned}, Meta, Command) ->
             false -> start_statsd(State)
         end,
     WorkerId = proplists:get_value(worker_id, Meta, undefined),
-    lager:info("Executing ~p... on ~p~n", [Command, WorkerId]),
+    logger:info("Executing ~p... on ~p~n", [Command, WorkerId]),
     TimeStart = os:timestamp(),
     case run(Command, [], WorkerId) of
         0 -> mzb_metrics:notify("success", 1);
         ExitCode ->
             mzb_metrics:notify("fail", 1),
-            lager:error("Execution on ~p failed. Exit Code: ~p", [WorkerId, ExitCode])
+            logger:error("Execution on ~p failed. Exit Code: ~p", [WorkerId, ExitCode])
     end,
     TimeFinish = os:timestamp(),
     mzb_metrics:notify({"latency", histogram}, timer:now_diff(TimeFinish, TimeStart)),
@@ -65,10 +65,10 @@ get_data(Port, WorkerId) -> get_data(Port, WorkerId, []).
 get_data(Port, WorkerId, _Buffer) ->
     receive
         {stdout, _Pid, Bytes} ->
-            lager:info("Worker ~p output: ~s", [WorkerId, Bytes]),
+            logger:info("Worker ~p output: ~s", [WorkerId, Bytes]),
             get_data(Port, WorkerId, []);
         {stderr, _Pid, Bytes} ->
-            lager:error("Worker ~p error: ~s", [WorkerId, Bytes]),
+            logger:error("Worker ~p error: ~s", [WorkerId, Bytes]),
             get_data(Port, WorkerId, []);
         {'DOWN', _ , _, _, {exit_status, Code}} -> Code;
         {'DOWN', _ , _, _, normal} -> 0
@@ -104,10 +104,10 @@ report(Bin) ->
                 case Type of
                     <<"c">> -> {counter, parse_num(Value)};
                     <<"g">> -> {gauge, parse_num(Value)};
-                    _ -> lager:info("Unknown type ~p", [Type]), gauge
+                    _ -> logger:info("Unknown type ~p", [Type]), gauge
                 end,
             mzb_metrics:notify({MetricStr, TypeAtom}, ValueInt);
-        _ -> lager:info("Unknown format: ~s", [Bin])
+        _ -> logger:info("Unknown format: ~s", [Bin])
     end.
 
 parse_num(Bin) ->

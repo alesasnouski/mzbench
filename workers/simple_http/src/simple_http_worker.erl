@@ -34,7 +34,7 @@ get(State, _Meta, URL, Options) ->
     {HackneyOptions, Headers} = parse_options(Options),
     Headers2 = add_cookies(Headers),
 
-    ShouldLog andalso lager:info("GET ~s~nHeaders: ~p", [URL, Headers2]),
+    ShouldLog andalso logger:info("GET ~s~nHeaders: ~p", [URL, Headers2]),
     StartTime = os:timestamp(),
     Response = hackney:request(get, list_to_binary(URL), Headers2, <<"">>, HackneyOptions),
     Latency = timer:now_diff(os:timestamp(), StartTime),
@@ -45,16 +45,16 @@ get(State, _Meta, URL, Options) ->
         {ok, ExpectedCode, RespHeaders, Ref} ->
             save_cookies(RespHeaders),
             case ShouldLog of
-                true -> lager:info("GET succ~nURL: ~p~nReply: ~p ~p~n~p", [URL, ExpectedCode, RespHeaders, hackney:body(Ref)]);
+                true -> logger:info("GET succ~nURL: ~p~nReply: ~p ~p~n~p", [URL, ExpectedCode, RespHeaders, hackney:body(Ref)]);
                 false -> hackney:skip_body(Ref)
             end,
             mzb_metrics:notify({"http_ok", counter}, 1);
         {ok, _, _, Ref} = Reply ->
-            lager:error("GET failed~nURL: ~p~nHeaders: ~p~nReply:~p~n~p", [URL, Headers2, Reply, hackney:body(Ref)]),
+            logger:error("GET failed~nURL: ~p~nHeaders: ~p~nReply:~p~n~p", [URL, Headers2, Reply, hackney:body(Ref)]),
             mzb_metrics:notify({"http_fail", counter}, 1);
         E ->
-            lager:error("hackney:request failed: ~p", [E]),
-            lager:error("hackney:request failed~nURL: ~p~nHeaders: ~p~nReason: ~p", [URL, Headers, E]),
+            logger:error("hackney:request failed: ~p", [E]),
+            logger:error("hackney:request failed~nURL: ~p~nHeaders: ~p~nReason: ~p", [URL, Headers, E]),
             mzb_metrics:notify({"other_fail", counter}, 1)
     end,
     {nil, State}.
@@ -65,7 +65,7 @@ post(State, _Meta, URL, Body, Options) ->
 
     {HackneyOptions, Headers} = parse_options(Options),
     Headers2 = add_cookies(Headers),
-    ShouldLog andalso lager:info("POST ~s~nHeaders: ~p~nBody: ~p", [URL, Headers2, Body]),
+    ShouldLog andalso logger:info("POST ~s~nHeaders: ~p~nBody: ~p", [URL, Headers2, Body]),
     StartTime = os:timestamp(),
     Response = hackney:request(post, list_to_binary(URL), Headers2, list_to_binary(Body), HackneyOptions),
     Latency = timer:now_diff(os:timestamp(), StartTime),
@@ -75,16 +75,16 @@ post(State, _Meta, URL, Body, Options) ->
     case Response of
         {ok, ExpectedCode, RespHeaders, Ref} ->
             case ShouldLog of
-                true -> lager:info("POST succ~nURL: ~p~nReply:~p ~p~n~p", [URL, ExpectedCode, RespHeaders, hackney:body(Ref)]);
+                true -> logger:info("POST succ~nURL: ~p~nReply:~p ~p~n~p", [URL, ExpectedCode, RespHeaders, hackney:body(Ref)]);
                 false -> hackney:skip_body(Ref)
             end,
             save_cookies(RespHeaders),
             mzb_metrics:notify({"http_ok", counter}, 1);
         {ok, _, _, Ref} = Reply ->
-            lager:error("POST failed~nURL: ~p~nHeaders: ~p~nBody: ~p~nReply:~p~n~p", [URL, Headers2, Body, Reply, hackney:body(Ref)]),
+            logger:error("POST failed~nURL: ~p~nHeaders: ~p~nBody: ~p~nReply:~p~n~p", [URL, Headers2, Body, Reply, hackney:body(Ref)]),
             mzb_metrics:notify({"http_fail", counter}, 1);
         E ->
-            lager:error("hackney:request failed~nURL: ~p~nHeaders: ~p~nBody: ~p~nReason: ~p", [URL, Headers, Body, E]),
+            logger:error("hackney:request failed~nURL: ~p~nHeaders: ~p~nBody: ~p~nReason: ~p", [URL, Headers, Body, E]),
             mzb_metrics:notify({"other_fail", counter}, 1)
     end,
 

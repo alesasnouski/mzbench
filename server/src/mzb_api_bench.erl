@@ -502,7 +502,7 @@ handle_cast({director_message, {new_metrics, NewMetrics}}, #{metrics:= Metrics, 
     {noreply, maybe_update_bench(State#{metrics => NewMetrics})};
 
 handle_cast({director_message, Unknown}, State) ->
-    lager:error("Unknown director message ~p", [Unknown]),
+    logger:error("Unknown director message ~p", [Unknown]),
     {noreply, State};
 
 handle_cast({env_changed, NewEnv}, State = #{config:= Config}) ->
@@ -551,7 +551,7 @@ terminate(Reason, #{id:= Id} = State) ->
     spawn(
         fun() ->
             try
-                lager:info("Starting finalizing process for #~p", [Id]),
+                logger:info("Starting finalizing process for #~p", [Id]),
                 {ok, Timer} = timer:kill_after(5 * 60 * 1000),
                 Stages = proplists:get_value(finalize, workflow_config(State), []),
                 NewState = handle_pipeline_status({final, failed}, State),
@@ -569,7 +569,7 @@ terminate(Reason, #{id:= Id} = State) ->
                 timer:cancel(Timer)
             catch
                 Class:Error:Stacktrace ->
-                    lager:error("Finalizing process for #~p has crashed with reason: ~p~n~p", [Id, Error, Stacktrace]),
+                    logger:error("Finalizing process for #~p has crashed with reason: ~p~n~p", [Id, Error, Stacktrace]),
                     erlang:raise(Class, Error, Stacktrace)
             end
         end),
@@ -625,12 +625,12 @@ extract_node_install_spec(Params) ->
         case Get(mzbench_git) of
             undefined -> ok;
             _ ->
-                 lager:error("mzbench_git param is obsolete, use node_git instead"),
+                 logger:error("mzbench_git param is obsolete, use node_git instead"),
                  erlang:error(mzbench_git_is_obsolete_use_node_git)
         end,
         case Get(mzbench_rsync) of
             undefined -> ok;
-            _ -> lager:error("mzbench_rsync param is obsolete, use node_rsync instead"),
+            _ -> logger:error("mzbench_rsync param is obsolete, use node_rsync instead"),
                  erlang:error(mzbench_rsync_is_obsolete_use_node_rsync)
         end,
     % END OF BC CODE
@@ -664,7 +664,7 @@ send_email_report(Emails, #{id:= Id,
         MetricNames = mzb_api_metrics:extract_metric_names(Metrics),
         MetricFilenames = [metrics_file(N, Config) || N <- MetricNames],
         {Subj, Body} = generate_mail_body(Id, Status, Config),
-        lager:info("EMail report: ~n~s~n~s~n", [Subj, Body]),
+        logger:info("EMail report: ~n~s~n~s~n", [Subj, Body]),
         Attachments = lists:map(
             fun (F) ->
                 {ok, Bin} = file:read_file(local_path(F, Config)),
@@ -673,7 +673,7 @@ send_email_report(Emails, #{id:= Id,
             end, MetricFilenames),
         lists:foreach(
             fun (Addr) ->
-                lager:info("Sending bench results to ~s", [Addr]),
+                logger:info("Sending bench results to ~s", [Addr]),
                 BAddr = list_to_binary(Addr),
                 mzb_api_mail:send(BAddr, Subj, Body, Attachments, application:get_env(mzbench_api, mail, []))
             end, Emails),

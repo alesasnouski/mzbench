@@ -26,5 +26,5 @@ metrics() -> [].
 
 -spec operation(state(), meta(), string()) -> {nil, state()}.
 operation(State, _Meta, Param) ->
-    lager:info("It works ~p~n", [Param]),
+    logger:info("It works ~p~n", [Param]),
     {nil, State}.

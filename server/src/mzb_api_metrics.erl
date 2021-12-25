@@ -14,7 +14,7 @@ get_metrics(UserName, DirNode, Host, RemoteScriptPath, RemoteEnvPath) ->
         jiffy:decode(Res, [return_maps])
     catch
         C:E:ST ->
-            lager:error("Failed to parse metrics names cause of ~p~nOutput: ~p~nStacktrace: ~p", [E, Res, ST]),
+            logger:error("Failed to parse metrics names cause of ~p~nOutput: ~p~nStacktrace: ~p", [E, Res, ST]),
             erlang:raise(C,E,ST)
     end.
 

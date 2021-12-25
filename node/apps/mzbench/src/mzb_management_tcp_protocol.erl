@@ -35,7 +35,7 @@ dispatch({request, Ref, Msg}, State) ->
         noreply -> ok
     catch
         C:Error:ST ->
-            system_log:error("Api server message handling exception: ~p~n~p", [Error, ST]),
+            logger:error("Api server message handling exception: ~p~n~p", [Error, ST]),
             send_message({response, Ref, {exception, {C, Error, ST}}}, State)
     end,
     {noreply, State};
@@ -45,7 +45,7 @@ dispatch(close_req, #state{socket = Socket, transport = Transport} = State) ->
     {stop, normal, State};
 
 dispatch(Unhandled, State) ->
-    system_log:error("Unhandled tcp message: ~p", [Unhandled]),
+    logger:error("Unhandled tcp message: ~p", [Unhandled]),
     {noreply, State}.
 
 get_port() ->
@@ -76,7 +76,7 @@ handle_message({connect_nodes, HostsAndPorts}, ReplyFun) ->
         noreply
     catch
         _:E:ST ->
-            system_log:error("Connecting nodes error: ~p~n~p", [E, ST]),
+            logger:error("Connecting nodes error: ~p~n~p", [E, ST]),
             {reply, {error, E}}
     end;
 
@@ -87,7 +87,7 @@ handle_message({run_command, Pool, Percent, Command}, _) ->
     {reply, mzb_director:run_command(Pool, Percent, Command)};
 
 handle_message({get_log_port, Node}, _) ->
-    case mzb_interconnect:call(Node, get_system_log_port) of
+    case mzb_interconnect:call(Node, get_logger_port) of
         {badrpc, Reason} -> {reply, {error, {badrpc, Node, Reason}}};
         Port -> {reply, {ok, Port}}
     end;
@@ -141,15 +141,15 @@ handle_info({tcp, Socket, Msg}, State = #state{socket = Socket}) ->
     dispatch(erlang:binary_to_term(Msg), State);
 
 handle_info({tcp_error, _, Reason}, State) ->
-    system_log:warning("~p was closed with error: ~p", [?MODULE, Reason]),
+    logger:warning("~p was closed with error: ~p", [?MODULE, Reason]),
     {stop, Reason, State};
 
 handle_info(Info, State) ->
-    system_log:error("~p has received unexpected info: ~p", [?MODULE, Info]),
+    logger:error("~p has received unexpected info: ~p", [?MODULE, Info]),
     {stop, normal, State}.
 
 handle_cast(Msg, State) ->
-    system_log:error("~p has received unexpected cast: ~p", [?MODULE, Msg]),
+    logger:error("~p has received unexpected cast: ~p", [?MODULE, Msg]),
     {noreply, State}.
 
 handle_call({new_metrics, Metrics}, _From, State = #state{}) ->
@@ -161,11 +161,11 @@ handle_call({report, [Name, Value]}, _From, State = #state{}) ->
     {reply, ok, State};
 
 handle_call(Request, _From, State) ->
-    system_log:error("~p has received unexpected call: ~p", [?MODULE, Request]),
+    logger:error("~p has received unexpected call: ~p", [?MODULE, Request]),
     {reply, ignore, State}.
 
 terminate(_Reason, _State) ->
-    system_log:info("Management tcp connection terminated: ~p", [_Reason]),
+    logger:info("Management tcp connection terminated: ~p", [_Reason]),
     gen_event:delete_handler(metrics_event_manager, {mzb_metric_reporter, self()}, []),
     ok.
 

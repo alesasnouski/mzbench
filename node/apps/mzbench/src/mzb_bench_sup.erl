@@ -25,14 +25,14 @@ run_bench(ScriptPath, DefaultEnv) ->
         end
     catch _C:{error, Errors} = E when is_list(Errors) -> E;
           C:E:ST ->
-              system_log:error("Failed to run benchmark ~p:~p~n~p", [C, E, ST]),
+              logger:error("Failed to run benchmark ~p:~p~n~p", [C, E, ST]),
               {error, [mzb_string:format("Failed to run benchmark", [])]}
     end.
 
 read_and_validate(Path, Env) ->
     case mzb_script_validator:read_and_validate(Path, Env) of
         {ok, Warnings, Body, NewEnv} ->
-            lists:foreach(fun (Msg) -> system_log:warning("~s", [Msg]) end, Warnings),
+            lists:foreach(fun (Msg) -> logger:warning("~s", [Msg]) end, Warnings),
             {Body, NewEnv};
         {error, _, _, _, Errors} -> erlang:error({error, Errors})
     end.
@@ -43,7 +43,7 @@ is_ready() ->
         false =/= lists:keyfind(mzbench, 1, Apps)
     catch
         _:Error:ST ->
-            system_log:error("is_ready exception: ~p~nStacktrace: ~p", [Error, ST]),
+            logger:error("is_ready exception: ~p~nStacktrace: ~p", [Error, ST]),
             false
     end.
 
@@ -63,7 +63,7 @@ start_pool(Pool, Env, NumNodes, Offset) ->
 %%% Supervisor callbacks
 %%%===================================================================
 init([]) ->
-    system_log:info("[ mzb_bench_sup ] I'm at ~p", [self()]),
+    logger:info("[ mzb_bench_sup ] I'm at ~p", [self()]),
     {ok, {{one_for_all, 0, 1}, [
         child_spec(signaler, mzb_signaler, [], permanent)
     ]}}.
@@ -76,7 +76,7 @@ child_spec(Name, Module, Args, Restart) ->
 
 start_director(Body, Nodes, Env, Continuation) ->
     BenchName = mzbl_script:get_benchname(mzbl_script:get_real_script_name(Env)),
-    system_log:info("[ mzb_bench_sup ] Loading ~p Nodes: ~p", [BenchName, Nodes]),
+    logger:info("[ mzb_bench_sup ] Loading ~p Nodes: ~p", [BenchName, Nodes]),
     supervisor:start_child(?MODULE,
                             child_spec(director, mzb_director,
                                        [whereis(?MODULE), BenchName, Body, Nodes, Env, Continuation],

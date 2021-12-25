@@ -2,17 +2,17 @@
 
 -export([handle/2]).
 
-handle(get_system_log_port, _) ->
-    {reply, ranch:get_port(lager_tcp_server)};
+handle(get_logger_port, _) ->
+    {reply, ranch:get_port(logger_tcp_server)};
 
 handle(get_user_log_port, _) ->
-    {reply, ranch:get_port(lager_tcp_server_user)};
+    {reply, ranch:get_port(logger_tcp_server_user)};
 
 handle({set_signaler_nodes, Nodes}, _) ->
     {reply, mzb_signaler:set_nodes(Nodes)};
 
 handle({create_histogram, Name}, _) ->
-    {reply, mzb_histigram:create(Name)};
+    {reply, mzb_histogram:create(Name)};
 
 handle({mzb_watchdog, activate}, _) ->
     {reply, mzb_watchdog:activate()};
@@ -72,6 +72,6 @@ handle({user_metric_value, _Ref = Callback, {Metric, Value}}, _) ->
     noreply;
 
 handle(Unhandled, _) ->
-    system_log:error("Unhandled node message: ~p", [Unhandled]),
+    logger:error("Unhandled node message: ~p", [Unhandled]),
     erlang:error({unknown_message, Unhandled}).
 

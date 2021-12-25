@@ -37,7 +37,7 @@ init(Ref, Socket, Transport, _Opts) ->
     gen_server:enter_loop(?MODULE, [], #state{socket=Socket, transport=Transport, init_timer = Timer}).
 
 dispatch({init, NodeName, Role}, #state{socket = Socket, transport = Transport, init_timer = Timer} = State) ->
-    system_log:info("Received init from ~p ~p", [Role, NodeName]),
+    logger:info("Received init from ~p ~p", [Role, NodeName]),
     Sender = fun (Msg) -> send(Transport, Socket, Msg) end,
     case mzb_interconnect:accept_connection(NodeName, Role, self(), Sender) of
         {ok, MyRole} ->
@@ -68,19 +68,19 @@ handle_info({tcp, Socket, Msg}, State = #state{socket = Socket}) ->
     dispatch(erlang:binary_to_term(Msg), State);
 
 handle_info({tcp_error, _, Reason}, State) ->
-    system_log:warning("~p was closed with reason: ~p", [?MODULE, Reason]),
+    logger:warning("~p was closed with reason: ~p", [?MODULE, Reason]),
     {stop, Reason, State};
 
 handle_info(Info, State) ->
-    system_log:error("~p has received unexpected info: ~p", [?MODULE, Info]),
+    logger:error("~p has received unexpected info: ~p", [?MODULE, Info]),
     {stop, normal, State}.
 
 handle_cast(Msg, State) ->
-    system_log:error("~p has received unexpected cast: ~p", [?MODULE, Msg]),
+    logger:error("~p has received unexpected cast: ~p", [?MODULE, Msg]),
     {noreply, State}.
 
 handle_call(Request, _From, State) ->
-    system_log:error("~p has received unexpected call: ~p", [?MODULE, Request]),
+    logger:error("~p has received unexpected call: ~p", [?MODULE, Request]),
     {reply, ignore, State}.
 
 terminate(_Reason, #state{} = _State) ->

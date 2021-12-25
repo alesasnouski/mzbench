@@ -13,9 +13,9 @@ validate(Script) ->
     Errors = [format_signal_deadlock_error(SCC) || SCC <- SCCs] ++
              [format_standalone_error(V) || V <- Standalones],
     Edges = [digraph:edge(Graph, E) || E <- digraph:edges(Graph)],
-    system_log:info("signals graph: ~p", [Edges]),
-    system_log:info("signals graph sccs: ~p", [SCCs]),
-    system_log:info("standalone signals: ~p", [Standalones]),
+    logger:info("signals graph: ~p", [Edges]),
+    logger:info("signals graph sccs: ~p", [SCCs]),
+    logger:info("standalone signals: ~p", [Standalones]),
     case Errors of
         [] -> ok;
         _  ->

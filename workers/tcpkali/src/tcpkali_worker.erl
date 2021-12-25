@@ -266,11 +266,11 @@ start_orchestrator(Alg, ID) ->
         fun () ->
             {ok, Socket} = gen_tcp:accept(LSocket),
             send_start(Socket),
-            lager:info("Accepted connection at orchestration server from tcpkali"),
+            logger:info("Accepted connection at orchestration server from tcpkali"),
             orchestrate(Socket, Alg, WorkerPid, ID)
         end),
     OrchAddr = lists:flatten(io_lib:format("127.0.0.1:~b", [Port])),
-    lager:info("Started orchestration server at ~s", [OrchAddr]),
+    logger:info("Started orchestration server at ~s", [OrchAddr]),
     {{OrchPid, LSocket}, OrchAddr}.
 
 stop_orchestration({Pid, LSocket}) ->
@@ -351,7 +351,7 @@ maintain_alg(Latency, State = #{alg:= {max_rate, MaxLatency}}) ->
                     down -> State#{direction => up, step => max(Step div 2, ?StepMin)}
                 end,
             NewStep = maps:get(step, NewState),
-            lager:info("Current latency is ~p, target is ~p, "
+            logger:info("Current latency is ~p, target is ~p, "
                        "increasing rate by ~b%",
                        [Latency, MaxLatency, NewStep]),
             {_, NextTargetRate} = send_increase_rate(Socket, NewStep),
@@ -363,7 +363,7 @@ maintain_alg(Latency, State = #{alg:= {max_rate, MaxLatency}}) ->
                     down -> State
                 end,
             NewStep = maps:get(step, NewState),
-            lager:info("Current latency is ~p, target is ~p, "
+            logger:info("Current latency is ~p, target is ~p, "
                        "decreasing rate by ~b%",
                        [Latency, MaxLatency, NewStep]),
             {_, NextTargetRate} = send_decrease_rate(Socket, NewStep),
@@ -371,7 +371,7 @@ maintain_alg(Latency, State = #{alg:= {max_rate, MaxLatency}}) ->
         false when Latency > HighThreshold andalso Direction == up ->
             NewState = State#{direction => down, step => max(Step div 2, ?StepMin)},
             NewStep = maps:get(step, NewState),
-            lager:info("Current latency is ~p, target is ~p, "
+            logger:info("Current latency is ~p, target is ~p, "
                        "decreasing rate by ~b%",
                        [Latency, MaxLatency, NewStep]),
             {_, NextTargetRate} = send_decrease_rate(Socket, NewStep),
@@ -379,7 +379,7 @@ maintain_alg(Latency, State = #{alg:= {max_rate, MaxLatency}}) ->
         true ->
             State;
         false ->
-            lager:info("Waiting for rate to catch up: ~p -> ~p", [CurrentRate/Connections, TargetRate]),
+            logger:info("Waiting for rate to catch up: ~p -> ~p", [CurrentRate/Connections, TargetRate]),
             State
     end.
 
@@ -410,13 +410,13 @@ wait_current_rate(Socket) ->
             end,
             {Units, Value};
         {ok, Msg} ->
-            lager:error("Received wrong message from tcpkali (waiting for currentRate): ~p", [Msg]),
+            logger:error("Received wrong message from tcpkali (waiting for currentRate): ~p", [Msg]),
             erlang:error({wrong_message, Msg});
         {error, closed} ->
-            lager:error("Orch connection from tcpkali was closed"),
+            logger:error("Orch connection from tcpkali was closed"),
             erlang:error(tcpkali_orch_connection_closed);
         {error, Reason} ->
-            lager:error("Failed to get currentRate from tcpkali: ~p", [Reason]),
+            logger:error("Failed to get currentRate from tcpkali: ~p", [Reason]),
             erlang:error({no_current_rate, Reason})
     end.
 
@@ -504,7 +504,7 @@ json2cbor(State, _Meta, Str, Type) ->
         try jiffy:decode(Str3, [return_maps])
         catch
             C:E:ST ->
-                lager:error("Bad json: ~s", [Str3]),
+                logger:error("Bad json: ~s", [Str3]),
                 erlang:raise(C, E, ST)
         end,
 
@@ -540,7 +540,7 @@ prepare_val(Val) when is_list(Val) ->
 run(Command, WorkerID) ->
     StatsdPort = spawn_statsd(WorkerID),
     CommandToExec = set_default_percentiles(set_statsd_port(Command, StatsdPort)),
-    lager:info("Executing ~p...", [CommandToExec]),
+    logger:info("Executing ~p...", [CommandToExec]),
     {ok, Pid, _OsPid} = exec:run(CommandToExec, [monitor, stdout, stderr]),
     get_data(Pid).
 
@@ -565,7 +565,7 @@ is_arg_set(Command, Arg) ->
 get_data(Pid) ->
     receive
         {Stream, _Pid, Bytes} when (Stream == stdout) or (Stream == stderr) ->
-            lager:info("Output: ~s", [Bytes]),
+            logger:info("Output: ~s", [Bytes]),
             get_data(Pid);
         {'DOWN', _ , _, _, {exit_status, Code}} -> Code;
         {'DOWN', _ , _, _, normal} -> 0
@@ -598,7 +598,7 @@ report(Bin, WorkerID) ->
                 case Type of
                     <<"c">> -> {counter, parse_int(Value)};
                     <<"g">> -> {gauge, parse_int(Value)};
-                    _ -> lager:info("Unknown type ~p", [Type]), gauge
+                    _ -> logger:info("Unknown type ~p", [Type]), gauge
                 end,
 
             case TypeAtom of
@@ -608,7 +608,7 @@ report(Bin, WorkerID) ->
                     notify(MetricStr ++ "." ++ WorkerID, TypeAtom, ValueInt),
                     notify(MetricStr, TypeAtom, ValueInt)
             end;
-        _ -> lager:info("Unknown format: ~s", [Bin])
+        _ -> logger:info("Unknown format: ~s", [Bin])
     end.
 
 notify(Metric, Type, Value) ->

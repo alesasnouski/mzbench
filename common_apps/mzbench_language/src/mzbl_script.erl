@@ -56,10 +56,10 @@ read_from_string(String) ->
         mzbl_literals:convert(parse(String))
     catch
         C:{parse_error, {A, B, ErrorInfo}}:ST ->
-            lager:error("Parsing script file failed: ~s", [erl_parse:format_error(ErrorInfo)]),
+            logger:error("Parsing script file failed: ~s", [erl_parse:format_error(ErrorInfo)]),
             erlang:raise(C, {parse_error, {A, B, ErrorInfo}}, ST);
         C:E:ST ->
-            lager:error(
+            logger:error(
                 "Failed to read script '~p' 'cause of ~p~nStacktrace: ~s",
                 [String, E, pretty_errors:stacktrace(ST)]),
             erlang:raise(C,E,ST)
@@ -71,7 +71,7 @@ read(Path) ->
         read_from_string(read_file(Path))
     catch
         C:E:ST ->
-            lager:error(
+            logger:error(
                 "Failed to read script: ~p 'cause of ~p~nStacktrace: ~s",
                 [Path, E, pretty_errors:stacktrace(ST)]),
             erlang:raise(C, E, ST)
@@ -207,7 +207,7 @@ import_resource(Env, File, Type) ->
                         case lists:append([mzb_file:wildcard(M) || M <- Masks])  of
                             [] -> erlang:error(enoent);
                             [Path|_] ->
-                                lager:error("Trying ~p...", [Path]),
+                                logger:error("Trying ~p...", [Path]),
                                 case file:read_file(Path) of
                                     {ok, D} -> D;
                                     {error, R} -> erlang:error(R)
@@ -218,7 +218,7 @@ import_resource(Env, File, Type) ->
         convert(Content, Type)
     catch
         _:Reason ->
-            lager:error("Resource ~p(~p) import error: ~p", [File, Type, Reason]),
+            logger:error("Resource ~p(~p) import error: ~p", [File, Type, Reason]),
             erlang:error({import_resource_error, File, Type, Reason})
     end.
 

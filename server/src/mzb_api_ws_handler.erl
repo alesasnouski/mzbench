@@ -2,7 +2,7 @@
 
 -export([init/2,
          terminate/3,
-         websocket_handle/3,
+         websocket_handle/2,
          websocket_info/3,
          reauth/1,
          close/2]).
@@ -84,7 +84,7 @@
 }).
 
 init(Req, _Opts) ->
-    lager:info("New WS connection"),
+    logger:info("New WS connection"),
     Cookies = cowboy_req:parse_cookies(Req),
     Token = proplists:get_value(mzb_api_auth:cookie_name(), Cookies, undefined),
 
@@ -108,17 +108,17 @@ terminate(_Reason, _Req, #state{ref = Ref}) ->
     gen_event:delete_handler(mzb_api_firehose, {mzb_api_firehose, Ref}, [self()]),
     ok.
 
-websocket_handle({text, Msg}, Req, State) ->
+websocket_handle({text, Msg}, State) ->
     case dispatch_request(jiffy:decode(Msg, [return_maps]), State) of
         {reply, Reply, NewState} ->
             JsonReply = jiffy:encode(mzb_string:str_to_bstr(Reply), [force_utf8]),
-            {reply, {text, JsonReply}, Req, NewState};
+            {reply, {text, JsonReply}, NewState};
         {ok, NewState} ->
-            {ok, Req, NewState}
+            {ok, NewState}
     end;
 
-websocket_handle(_Data, Req, State) ->
-    {ok, Req, State}.
+websocket_handle(_Data, State) ->
+    {ok, State}.
 
 websocket_info(Message, Req, State) ->
     case dispatch_info(Message, State) of
@@ -238,7 +238,7 @@ dispatch_info({'DOWN', MonRef, process, MonPid, Reason},
                 case Reason of
                     normal -> ok;
                     aborted -> ok;
-                    _ -> lager:error("~p stream with stream_id = ~p crashed with reason: ~p", [Kind, StreamId, Reason])
+                    _ -> logger:error("~p stream with stream_id = ~p crashed with reason: ~p", [Kind, StreamId, Reason])
                 end,
                 StreamId;
             false -> false
@@ -247,7 +247,7 @@ dispatch_info({'DOWN', MonRef, process, MonPid, Reason},
     case CheckStream(Streams, "Metric") of
         false -> case CheckStream(LStreams, "Log") of
                     false ->
-                        lager:error("Can't find streamer by {~p,~p}", [MonPid, MonRef]),
+                        logger:error("Can't find streamer by {~p,~p}", [MonPid, MonRef]),
                         {ok, State};
                     StreamId -> {ok, State#state{log_streams = maps:remove(StreamId, LStreams)}}
                  end;
@@ -258,11 +258,11 @@ dispatch_info({'DOWN', _, process, _, _}, State) ->
     {ok, State};
 
 dispatch_info({close, Reason}, State) ->
-    lager:info("Closing ~p ws connection because of ~p", [self(), Reason]),
+    logger:info("Closing ~p ws connection because of ~p", [self(), Reason]),
     {stop, State};
 
 dispatch_info(Info, State) ->
-    lager:warning("~p has received unexpected info: ~p", [?MODULE, Info]),
+    logger:warning("~p has received unexpected info: ~p", [?MODULE, Info]),
     {ok, State}.
 
 dispatch_request(#{<<"cmd">> := <<"generate-token">>} = Cmd, #state{user_info = UserInfo} = State) ->
@@ -340,7 +340,7 @@ dispatch_request(#{<<"cmd">> := <<"unsubscribe_benchset">>} = Cmd, State = #stat
     end;
 
 dispatch_request(#{<<"cmd">> := <<"get_timeline">>} = Cmd, State = #state{}) ->
-    lager:info("Get timeline start"),
+    logger:info("Get timeline start"),
     Limit = mzb_bc:maps_get(<<"limit">>, Cmd, 10),
     MaxId = mzb_bc:maps_get(<<"max_id">>, Cmd, undefined),
     MinId = mzb_bc:maps_get(<<"min_id">>, Cmd, undefined),
@@ -365,7 +365,7 @@ dispatch_request(#{<<"cmd">> := <<"get_timeline">>} = Cmd, State = #state{}) ->
 
     TimelineIds = [Id || #{id:= Id} <- TimelineItems],
 
-    lager:info("Get timeline end"),
+    logger:info("Get timeline end"),
     {reply, Event, State#state{timeline_opts   = Cmd,
                                timeline_bounds = {NewMinId, NewMaxId},
                                timeline_items  = TimelineIds}};
@@ -473,7 +473,7 @@ dispatch_request(#{<<"cmd">> := <<"remove_tag">>} = Cmd, #state{user_info = User
     {ok, State};
 
 dispatch_request(Cmd, State) ->
-    lager:warning("~p has received unexpected info: ~p~n~p", [?MODULE, Cmd, State]),
+    logger:warning("~p has received unexpected info: ~p~n~p", [?MODULE, Cmd, State]),
     {ok, State}.
 
 apply_update(Fun) ->
@@ -507,7 +507,7 @@ add_stream(StreamId, BenchId, MetricName, StreamParams, #state{metric_streams = 
         end_time = EndTime,
         stream_after_eof = StreamAfterEof
     } = StreamParams,
-    lager:debug("Starting streaming metric ~p of the benchmark #~p with stream_id = ~p, subsampling_interval = ~p,
+    logger:debug("Starting streaming metric ~p of the benchmark #~p with stream_id = ~p, subsampling_interval = ~p,
                     begin_time = ~p, end_time = ~p, time_window = ~p, stream_after_eof = ~p",
                     [MetricName, BenchId, StreamId, SubsamplingInterval, BeginTime, EndTime, TimeWindow, StreamAfterEof]),
     Self = self(),
@@ -519,13 +519,13 @@ add_stream(StreamId, BenchId, MetricName, StreamParams, #state{metric_streams = 
     State#state{metric_streams = maps:put(StreamId, Ref, Streams)}.
 
 add_log_stream(BenchId, StreamId, #state{log_streams = Streams} = State) ->
-    lager:debug("Starting streaming logs of the benchmark #~p, stream #~p", [BenchId, StreamId]),
+    logger:debug("Starting streaming logs of the benchmark #~p, stream #~p", [BenchId, StreamId]),
     Pid = self(),
     Ref = erlang:spawn_monitor(fun() -> stream_log(BenchId, StreamId, Pid) end),
     State#state{log_streams = maps:put(StreamId, Ref, Streams)}.
 
 remove_stream(StreamId, Streams) ->
-    lager:debug("Stoping stream with stream_id = ~p", [StreamId]),
+    logger:debug("Stoping stream with stream_id = ~p", [StreamId]),
     case maps:find(StreamId, Streams) of
         {ok, Ref} ->
             kill_streamer(Ref),
@@ -755,7 +755,7 @@ filter_dashboards(List, Query) ->
                    _ -> false
         end end, List)
     catch _:Error:ST ->
-        lager:error("Failed to apply dashboard filter: ~p ~p~n Query: ~p -- List ~p", [Error, ST, Query, List]),
+        logger:error("Failed to apply dashboard filter: ~p ~p~n Query: ~p -- List ~p", [Error, ST, Query, List]),
         []
     end.
 
@@ -808,7 +808,7 @@ is_satisfy_fields(Query, BenchInfo) ->
                           Field == Query
                   end, SearchFields)
     catch _:Error:ST ->
-        lager:error("Failed to apply filter: ~p ~p~n Query: ~p -- BenchInfo ~p", [Error, ST, Query, BenchInfo]),
+        logger:error("Failed to apply filter: ~p ~p~n Query: ~p -- BenchInfo ~p", [Error, ST, Query, BenchInfo]),
         false
     end.
 
@@ -896,7 +896,7 @@ log_file_streamer(Filename, ChunkSize, Compression, Pid, StreamId,
                     Pid ! {MessageType, batch_end, StreamId},
                     {0, StreamedBytes, no_overflow};
                 {error, E} ->
-                    lager:error("Error while reading log file: ~p", [E]),
+                    logger:error("Error while reading log file: ~p", [E]),
                     {0, StreamedBytes, no_overflow}
             end
     end.
@@ -941,7 +941,7 @@ stream_metric(Id, Metric, StreamParams, SendFun) ->
     try
         PollTimeout = application:get_env(mzbench_api, bench_poll_timeout, undefined),
         perform_streaming(Id, FileReader, SendFun, StreamParams#stream_parameters{metric_report_interval_sec = ReportIntervalMs div 1000}, PollTimeout),
-        lager:debug("Streamer for #~b ~s has finished", [Id, Metric])
+        logger:debug("Streamer for #~b ~s has finished", [Id, Metric])
     after
         FileReader(close)
     end.

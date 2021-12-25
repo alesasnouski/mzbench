@@ -125,7 +125,7 @@ handle_call({remove_cluster_info, Id}, _From, State) ->
     {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
-    lager:error("Unhandled call: ~p", [_Request]),
+    logger:error("Unhandled call: ~p", [_Request]),
     {noreply, State}.
 
 handle_cast({init_plugins, Plugins}, State) ->
@@ -133,11 +133,11 @@ handle_cast({init_plugins, Plugins}, State) ->
     {noreply, State#{default => Default, clouds => maps:from_list(Clouds)}};
 
 handle_cast(_Msg, State) ->
-    lager:error("Unhandled cast: ~p", [_Msg]),
+    logger:error("Unhandled cast: ~p", [_Msg]),
     {noreply, State}.
 
 handle_info(_Info, State) ->
-    lager:error("Unhandled info: ~p", [_Info]),
+    logger:error("Unhandled info: ~p", [_Info]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->
@@ -160,12 +160,12 @@ init_plugin({Name, Opts}) ->
     Provider =
         case Opts of
             #{application:= App} ->
-                lager:info("Loading cloud plugin: ~p...", [App]),
+                logger:info("Loading cloud plugin: ~p...", [App]),
                 case application:load(App) of
                     ok -> ok;
                     {error, {already_loaded, _}} -> ok;
                     {error, Reason} ->
-                        lager:error("Failed to load ~p cloud plugin with reason: ~p", [Name, Reason]),
+                        logger:error("Failed to load ~p cloud plugin with reason: ~p", [Name, Reason]),
                         erlang:error({load_failed, Name, Reason})
                 end,
                 ok = mzb_api_app:load_config(App),
@@ -173,7 +173,7 @@ init_plugin({Name, Opts}) ->
                 App;
             #{module:= M} -> M;
             #{} ->
-                lager:error("Either module or application param must be specified for ~p cloud plugin", [Name]),
+                logger:error("Either module or application param must be specified for ~p cloud plugin", [Name]),
                 erlang:error({bad_cloud_plugin, Name})
         end,
     Instance = Provider:start(Name, Opts),

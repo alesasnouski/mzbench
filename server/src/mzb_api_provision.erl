@@ -109,7 +109,7 @@ kill_nodes([Pid | NodePids], [H|Hosts], [Code|StopResults], UserName, Logger) ->
             _ -> false
         catch
             _:Error ->
-                lager:error("Bad node stop code: ~p~nReason: ~p", [Code, Error]),
+                logger:error("Bad node stop code: ~p~nReason: ~p", [Code, Error]),
                 false
         end,
 

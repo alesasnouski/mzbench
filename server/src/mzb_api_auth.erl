@@ -209,7 +209,7 @@ set_proxy(Type, Value, NoProxy) ->
             _ -> [parse_no_proxy(Str) || Str <- string:tokens(NoProxy, ",")]
         end,
     #{host := Host, port := Port} = uri_string:parse(Value),
-    lager:info("Using ~p:~p as ~p for auth (exceptions: ~p)", [Host, Port, Type, NoProxyList]),
+    logger:info("Using ~p:~p as ~p for auth (exceptions: ~p)", [Host, Port, Type, NoProxyList]),
     httpc:set_options([{Type, {{Host, Port}, NoProxyList}}], auth_profile).
 
 parse_no_proxy(Str) ->
