@@ -44,15 +44,15 @@ execute(State = #{statsd_spawned := StatsdSpawned}, Meta, Command) ->
         end,
     WorkerId = proplists:get_value(worker_id, Meta, undefined),
     logger:info("Executing ~p... on ~p~n", [Command, WorkerId]),
-    TimeStart = os:timestamp(),
+    TimeStart = erlang:monotonic_time(microsecond),
     case run(Command, [], WorkerId) of
         0 -> mzb_metrics:notify("success", 1);
         ExitCode ->
             mzb_metrics:notify("fail", 1),
             logger:error("Execution on ~p failed. Exit Code: ~p", [WorkerId, ExitCode])
     end,
-    TimeFinish = os:timestamp(),
-    mzb_metrics:notify({"latency", histogram}, timer:now_diff(TimeFinish, TimeStart)),
+    TimeFinish = erlang:monotonic_time(microsecond),
+    mzb_metrics:notify({"latency", histogram}, TimeFinish - TimeStart),
     {nil, NewState}.
 
 run(Command, _Opts, WorkerId) ->

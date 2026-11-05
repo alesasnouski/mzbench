@@ -18,9 +18,9 @@
 
 -define(TIMED(Name, Expr),
     (fun () ->
-        StartTime = os:timestamp(),
+        StartTime = erlang:monotonic_time(microsecond),
         Result = Expr,
-        Value = timer:now_diff(os:timestamp(), StartTime),
+        Value = erlang:monotonic_time(microsecond) - StartTime,
         mzb_metrics:notify({Name, histogram}, Value),
         Result
     end)()).

@@ -6,13 +6,13 @@
          get_stanza_parser/1,
          generate_marker/1,
          stream_parser/5,
-         find_stanzas/2,
-         ts_to_longts/1
+         find_stanzas/2
         ]).
 
 -include_lib("eunit/include/eunit.hrl").
 
 -define(DEFAULT_ACK_TIMEOUT, 120000).
+-define(STANZA_REGEXP_KEY, {?MODULE, stanza_regexp}).
 
 
 connect(Host, Port) ->
@@ -42,7 +42,7 @@ send_packet(Message, ResponseRegExp, Socket) ->
     end.
 
 generate_marker(Size) ->
-    Id = ts_to_longts(os:timestamp()),
+    Id = erlang:monotonic_time(microsecond),
     Marker = [<<"***">>, node_marker(), <<",">>, integer_to_binary(Id), <<"***">>],
     Filler = duplicate(Size - erlang:iolist_size(Marker), [$ ]),
     [Filler, Marker].
@@ -56,7 +56,7 @@ get_stanza_parser({latency}) ->
                 [Node, Ts] = string:tokens(Stamp, ","),
                 case Node of
                     CurrentNode -> % same node
-                        Latency = ts_to_longts(os:timestamp()) - list_to_integer(Ts),
+                        Latency = erlang:monotonic_time(microsecond) - list_to_integer(Ts),
                         mzb_metrics:notify({"xmpp.parser.latency", histogram}, Latency div 1000),
                         ok;
                     _ -> nothing
@@ -178,15 +178,7 @@ find_stanzas(Data, PrevState) ->
 find_stanzas(Data, PrevState, ListOfStanzas) ->
     Buffer = <<PrevState/binary, Data/binary>>,
 
-    % Precompile regexp speeds stanza parsing by 30%
-    % {ok, RegExp} = re:compile("</(message|presence|iq)>"),
-    RegExp = {re_pattern,1,0,0,
-                <<69,82,67,80,125,0,0,0,0,0,0,0,81,0,0,0,255,255,255,255,255,
-                  255,255,255,60,0,62,0,0,0,1,0,0,0,64,0,0,0,0,0,0,0,0,0,0,0,
-                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,125,0,57,29,60,29,47,
-                  127,0,19,0,1,29,109,29,101,29,115,29,115,29,97,29,103,29,
-                  101,113,0,7,29,105,29,113,113,0,19,29,112,29,114,29,101,29,
-                  115,29,101,29,110,29,99,29,101,114,0,45,29,62,114,0,57,0>>},
+    RegExp = stanza_regexp(),
 
     case re:run(Buffer, RegExp, [{capture, first}]) of
         {match, [{StartPos, Length}]} ->
@@ -197,9 +189,15 @@ find_stanzas(Data, PrevState, ListOfStanzas) ->
             {Buffer, lists:reverse(ListOfStanzas)}
     end.
 
-ts_to_longts(Ts) ->
-    {A1, A2, A3} = Ts,
-    (A1*1000000 + A2) * 1000000 + A3.
+stanza_regexp() ->
+    case persistent_term:get(?STANZA_REGEXP_KEY, undefined) of
+        undefined ->
+            {ok, RegExp} = re:compile("</(?:message|presence|iq)>"),
+            persistent_term:put(?STANZA_REGEXP_KEY, RegExp),
+            RegExp;
+        RegExp ->
+            RegExp
+    end.
 
 node_marker() -> integer_to_list(erlang:phash2(node())).
 

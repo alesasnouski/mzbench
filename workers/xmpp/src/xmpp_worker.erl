@@ -70,7 +70,6 @@ metrics() ->
     ].
 
 initial_state() ->
-    random:seed(os:timestamp()),
     #state{}.
 
 connect(State, _Meta, Username, Domain, Host, Port) ->
@@ -81,9 +80,9 @@ connect(State, _Meta, Username, Domain, Host, Port) ->
 
 initial_presence(State, Meta) -> initial_presence(State, Meta, "<presence").
 initial_presence(State = #state{socket = Socket}, _Meta, ResponsePolicy) ->
-    StartTime = xmpp_protocol:ts_to_longts(os:timestamp()),
+    StartTime = erlang:monotonic_time(microsecond),
     xmpp_protocol:send_packet({presence}, ResponsePolicy, Socket),
-    EndTime = xmpp_protocol:ts_to_longts(os:timestamp()),
+    EndTime = erlang:monotonic_time(microsecond),
     mzb_metrics:notify({"xmpp.send.initial-presence-latency", histogram}, EndTime - StartTime),
     {ok, State}.
 
@@ -96,13 +95,13 @@ close(State = #state{socket = Socket, stream_reader = Pid}, _Meta) ->
 
 enter_room(State, Meta, RoomName) -> enter_room(State, Meta, RoomName, any).
 enter_room(#state{username = Username, socket = Socket} = State, _Meta, RoomName, ResponsePolicy) ->
-    StartTime = xmpp_protocol:ts_to_longts(os:timestamp()),
+    StartTime = erlang:monotonic_time(microsecond),
 
     MucService = get_muc_service(State),
     xmpp_protocol:send_packet({muc_join, RoomName, MucService, Username}, ResponsePolicy, Socket),
     mzb_metrics:notify({"xmpp.send.enter-room", counter}, 1),
 
-    EndTime = xmpp_protocol:ts_to_longts(os:timestamp()),
+    EndTime = erlang:monotonic_time(microsecond),
     mzb_metrics:notify({"xmpp.send.enter-room-latency", histogram}, EndTime - StartTime),
     {ok, State}.
 
@@ -160,7 +159,7 @@ get_room_ids(State, _Meta, N, MaxId) ->
     {choose_random_ll(N, MaxId, sets:new()), State}.
 
 recipient(#state{username = Me} = State, Meta, Name, MaxId) ->
-    Id = random:uniform(MaxId),
+    Id = rand:uniform(MaxId),
     case iname(State, Meta, Name, Id) of
         {Me, _} ->
             NewId = case (Id + 1) of
@@ -176,7 +175,7 @@ marker(State, _Meta, Size) -> {xmpp_protocol:generate_marker(Size), State}.
 
 choose_random_ll(0, _, Set) -> sets:to_list(Set);
 choose_random_ll(N, MaxId, Set) ->
-    Id = random:uniform(MaxId),
+    Id = rand:uniform(MaxId),
     case sets:is_element(Id, Set) of
         true -> choose_random_ll(N, MaxId, Set);
         false ->

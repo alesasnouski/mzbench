@@ -19,14 +19,14 @@
 
 -record(payload, {
     data      = <<>>         :: binary(),
-    timestamp = erlang:now() :: erlang:timestamp()
+    timestamp = erlang:system_time(microsecond) :: integer()
 }).
 
 -define(TIMED(Name, Expr),
     (fun () ->
-        StartTime = os:timestamp(),
+        StartTime = erlang:monotonic_time(microsecond),
         Result = Expr,
-        Value = timer:now_diff(os:timestamp(), StartTime),
+        Value = erlang:monotonic_time(microsecond) - StartTime,
         mzb_metrics:notify({Name, histogram}, Value),
         Result
     end)()).
@@ -125,7 +125,7 @@ get(#s{channel = Channel, prefix = Prefix} = State, _Meta, InQ) ->
             #amqp_msg{payload = Payload} = Content,
             #payload{timestamp = Now1} = erlang:binary_to_term(Payload),
             mzb_metrics:notify({Prefix ++ ".get", counter}, 1),
-            mzb_metrics:notify({Prefix ++ ".latency", histogram}, timer:now_diff(erlang:now(), Now1));
+            mzb_metrics:notify({Prefix ++ ".latency", histogram}, erlang:system_time(microsecond) - Now1);
         #'basic.get_empty'{} ->
             nop
     end,
@@ -156,7 +156,7 @@ consumer_loop(Channel, Prefix) ->
             #amqp_msg{payload = Payload} = Content,
             #payload{timestamp = Now1} = erlang:binary_to_term(Payload),
             mzb_metrics:notify({Prefix ++ ".consume", counter}, 1),
-            mzb_metrics:notify({Prefix ++ ".latency", histogram}, timer:now_diff(erlang:now(), Now1)),
+            mzb_metrics:notify({Prefix ++ ".latency", histogram}, erlang:system_time(microsecond) - Now1),
             amqp_channel:call(Channel, #'basic.ack'{delivery_tag = Tag}),
             consumer_loop(Channel, Prefix);
 

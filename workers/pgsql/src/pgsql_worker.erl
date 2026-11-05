@@ -34,14 +34,14 @@ query(State, Meta, Group, Statement) when is_binary(Group) ->
     query(State, Meta, binary_to_list(Group), Statement);
 query(#s{connection = C} = State, _Meta, Group, Statement) ->
     State2 = add_metric_group(State, Group),
-    TimeStart = os:timestamp(),
+    TimeStart = erlang:monotonic_time(microsecond),
     case tuple_to_list(epgsql:squery(C, Statement)) of
         [error | E] -> logger:error("Error: ~p", [E]),
                     mzb_metrics:notify(Group ++ ".error", 1);
         [ok | _] -> mzb_metrics:notify(Group ++ ".ok", 1)
     end,
-    TimeFinish = os:timestamp(),
-    mzb_metrics:notify({Group ++ ".latency", histogram}, timer:now_diff(TimeFinish, TimeStart)),
+    TimeFinish = erlang:monotonic_time(microsecond),
+    mzb_metrics:notify({Group ++ ".latency", histogram}, TimeFinish - TimeStart),
     {nil, State2}.
 
 add_metric_group(#s{groups = Groups} = State, GroupName) ->

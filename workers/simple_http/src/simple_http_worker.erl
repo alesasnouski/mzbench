@@ -35,9 +35,9 @@ get(State, _Meta, URL, Options) ->
     Headers2 = add_cookies(Headers),
 
     ShouldLog andalso logger:info("GET ~s~nHeaders: ~p", [URL, Headers2]),
-    StartTime = os:timestamp(),
+    StartTime = erlang:monotonic_time(microsecond),
     Response = hackney:request(get, list_to_binary(URL), Headers2, <<"">>, HackneyOptions),
-    Latency = timer:now_diff(os:timestamp(), StartTime),
+    Latency = erlang:monotonic_time(microsecond) - StartTime,
 
     mzb_metrics:notify({"latency", histogram}, Latency),
 
@@ -66,9 +66,9 @@ post(State, _Meta, URL, Body, Options) ->
     {HackneyOptions, Headers} = parse_options(Options),
     Headers2 = add_cookies(Headers),
     ShouldLog andalso logger:info("POST ~s~nHeaders: ~p~nBody: ~p", [URL, Headers2, Body]),
-    StartTime = os:timestamp(),
+    StartTime = erlang:monotonic_time(microsecond),
     Response = hackney:request(post, list_to_binary(URL), Headers2, list_to_binary(Body), HackneyOptions),
-    Latency = timer:now_diff(os:timestamp(), StartTime),
+    Latency = erlang:monotonic_time(microsecond) - StartTime,
 
     mzb_metrics:notify({"latency", histogram}, Latency),
 
@@ -100,7 +100,7 @@ random_get(State, Meta, List) ->
 
 weighted_choose(List) ->
     Sum = lists:sum([W || {_, W} <- List]),
-    R = random:uniform(Sum),
+    R = rand:uniform(Sum),
     choose(R, List).
 
 choose(R, [{E, W}|_]) when R =< W -> E;

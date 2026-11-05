@@ -11,9 +11,9 @@
 
 -define(TIMED(Prefix, Expr),
     (fun () ->
-        StartTime = os:timestamp(),
+        StartTime = erlang:monotonic_time(microsecond),
         Result = Expr,
-        Value = timer:now_diff(os:timestamp(), StartTime),
+        Value = erlang:monotonic_time(microsecond) - StartTime,
         mzb_metrics:notify({Prefix ++ ".latency", histogram}, Value),
         count_response(Prefix, Result)
     end)()).

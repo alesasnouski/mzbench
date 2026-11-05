@@ -3,6 +3,7 @@ deps
 *.o
 *.beam
 *.plt
+compile_commands.json
 erl_crash.dump
 ebin
 node/rel/mzbench

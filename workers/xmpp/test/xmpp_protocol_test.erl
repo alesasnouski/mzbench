@@ -16,7 +16,7 @@ parse_stanzas_test() ->
 
 
 search_stanzas_randomized_test() ->
-    random:seed(now()),
+    rand:seed(exsplus),
     N = 100000,
     {Time, NStanzas} = timer:tc(?MODULE,  process_stanzas, [N, <<>>, 0, <<>>, 0]),
     ?debugFmt("~p stanzas parsed for ~p microseconds", [NStanzas, Time]),
@@ -29,14 +29,14 @@ process_stanzas(N, MessageStream, Length, ParserState, ParsedStanzas) when N /= 
 process_stanzas(N, MessageStream, 0, ParserState, ParsedStanzas) ->
     ?debugFmt("something wrong ~p ~p ~p ~p", [N, MessageStream, ParserState, ParsedStanzas]);
 process_stanzas(N, MessageStream, Length, ParserState, ParsedStanzas) ->
-    PartLength = random:uniform(Length),
+    PartLength = rand:uniform(Length),
     Part = binary:part(MessageStream, 0, PartLength),
     Rest = binary: part(MessageStream, PartLength, Length - PartLength),
     {NewParserState, Stanzas}  = xmpp_protocol:find_stanzas(Part, ParserState),
     process_stanzas(N, Rest, Length - PartLength, NewParserState, ParsedStanzas + length(Stanzas)).
 
 random_stanza() ->
-    random_stanza(random:uniform(3)).
+    random_stanza(rand:uniform(3)).
 random_stanza(1) ->
     <<"<message from='room@domain/mzbench' xml:lang='' type='groupchat' id='muc-msg-187'><body>*********************************@@@91830193,1443351393819142@@@</body></message>">>;
 random_stanza(2) ->

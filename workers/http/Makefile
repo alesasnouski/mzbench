@@ -1,4 +1,4 @@
-REBAR := $(abspath $(shell which ../../bin/rebar3 || which rebar3))
+REBAR ?= rebar3
 
 SOURCES := src/http_worker.erl src/http_worker.app.src
 
