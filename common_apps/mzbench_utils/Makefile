@@ -1,5 +1,5 @@
 
-REBAR := $(abspath $(shell which ../../bin/rebar3 || which rebar3))
+REBAR ?= rebar3
 
 # all files not in ebin or .eunit
 SOURCES := $(shell find src test -name .eunit -prune -o -name ebin -prune -o -type f -print)

@@ -1,4 +1,4 @@
-REBAR := $(abspath $(shell which ../bin/rebar3 || which rebar3))
+REBAR ?= rebar3
 SERVICE_NAME=mzbench_api
 GIT_HEAD := $(shell git rev-parse HEAD)
 

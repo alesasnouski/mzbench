@@ -39,7 +39,10 @@ handle_cast(_Msg, State) ->
 handle_info(trigger, State = #s{sleep = Sleep}) ->
     lists:foreach(
         fun (P) ->
-            _ = (catch erlang:garbage_collect(P)),
+            _ = try erlang:garbage_collect(P)
+                catch
+                    _:_ -> false
+                end,
             timer:sleep(Sleep)
         end, erlang:processes()),
     self() ! trigger,

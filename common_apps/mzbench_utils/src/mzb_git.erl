@@ -7,7 +7,10 @@
 get_git_short_sha1(GitRepo, GitRef, Logger) ->
     case filelib:is_dir(GitRepo) of
         true ->
-            _ = (catch mzb_subprocess:exec_format("bash -c \"cd ~s && git fetch --unshallow; true\"", [GitRepo], [stderr_to_stdout], Logger));
+            _ = try mzb_subprocess:exec_format("bash -c \"cd ~s && git fetch --unshallow; true\"", [GitRepo], [stderr_to_stdout], Logger)
+                catch
+                    _:_ -> ok
+                end;
         false ->
             ok
     end,

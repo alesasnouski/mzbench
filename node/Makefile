@@ -3,7 +3,7 @@ SECOND_ARG := $(wordlist 2,2,$(MAKECMDGOALS))
 
 .SILENT: new-worker
 
-REBAR := $(abspath $(shell which ../bin/rebar3 || which rebar3))
+REBAR ?= rebar3
 SERVICE_PREFIX=/mz
 SERVICE_NAME=mzbench
 SERVICE_LOG_DIR=/var/log/${SERVICE_NAME}

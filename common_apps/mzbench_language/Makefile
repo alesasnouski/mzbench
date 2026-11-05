@@ -1,5 +1,5 @@
 
-REBAR := $(abspath $(shell which ../../bin/rebar3 || which rebar3))
+REBAR ?= rebar3
 
 # all files not in ebin or .eunit
 SOURCES := $(shell find src include test -name .eunit -prune -o -name ebin -prune -o -type f -print)
@@ -35,8 +35,7 @@ clean:
 	$(REBAR) clean
 
 .make/compilation-up-to-date: $(SOURCES) rebar.config
-	$(REBAR) as pedantic compile
-	make -C _build/default/deps/jiffy
+	$(REBAR) compile
 	mkdir -p .make && touch $@
 
 -include ../../lib/dialyzer.mk
